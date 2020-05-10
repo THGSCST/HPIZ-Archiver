@@ -1,0 +1,31 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 16
+VisualStudioVersion = 16.0.30011.22
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HPIZ Archiver", "HPIZ Archiver\HPIZ Archiver.csproj", "{16E0E47B-1D2F-4AB8-B725-5802D4038608}"
+EndProject
+Project("{D954291E-2A0B-460D-934E-DC6B0785DB48}") = "HPIZ", "HPIZ\HPIZ.shproj", "{620D4934-25FC-42B6-906F-B7D34CDB50D5}"
+EndProject
+Global
+	GlobalSection(SharedMSBuildProjectFiles) = preSolution
+		HPIZ\HPIZ.projitems*{16e0e47b-1d2f-4ab8-b725-5802d4038608}*SharedItemsImports = 4
+		HPIZ\HPIZ.projitems*{620d4934-25fc-42b6-906f-b7d34cdb50d5}*SharedItemsImports = 13
+	EndGlobalSection
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{16E0E47B-1D2F-4AB8-B725-5802D4038608}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{16E0E47B-1D2F-4AB8-B725-5802D4038608}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{16E0E47B-1D2F-4AB8-B725-5802D4038608}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{16E0E47B-1D2F-4AB8-B725-5802D4038608}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {11B0BECE-36EC-47C3-AD40-B918E218C063}
+	EndGlobalSection
+EndGlobal

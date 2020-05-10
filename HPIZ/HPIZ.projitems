@@ -1,0 +1,22 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <MSBuildAllProjects>$(MSBuildAllProjects);$(MSBuildThisFileFullPath)</MSBuildAllProjects>
+    <HasSharedItems>true</HasSharedItems>
+    <SharedGUID>620d4934-25fc-42b6-906f-b7d34cdb50d5</SharedGUID>
+  </PropertyGroup>
+  <PropertyGroup Label="Configuration">
+    <Import_RootNamespace>HPIZ</Import_RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="$(MSBuildThisFileDirectory)Chunk.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Compression\CompressionMethod.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Compression\ZLibDeflater.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Compression\LZ77.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)DirectoryTree.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)FileData.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)HpiArchive.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)HpiFile.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Compression\ZopfliDeflater.cs" />
+  </ItemGroup>
+</Project>
