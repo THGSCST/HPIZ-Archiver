@@ -29,7 +29,6 @@ using System.Threading.Tasks;
 
 namespace CompressSharper.Zopfli
 {
-
     /// <summary>
     /// DEFLATE using the Zopfli algorithm
     /// </summary>
@@ -44,14 +43,10 @@ namespace CompressSharper.Zopfli
         public ZopfliDeflater(Stream stream)
         {
             if (stream == null)
-            {
                 throw new ArgumentNullException("stream", "stream cannot be null");
-            }
 
             if (!stream.CanWrite)
-            {
                 throw new ArgumentException("stream must be writable", "stream");
-            }
 
             _writer = new BitWriter(stream);
 
@@ -1280,7 +1275,7 @@ namespace CompressSharper.Zopfli
             /// <param name="distanceLengths">the 32 lengths of the distance codes.</param>
             private static void PatchDistanceCodesForBuggyDecoders(ref uint[] d_lengths)
             {
-                int numberOfDistanceCodes = 0; /* Amount of non-zero distance codes */
+                int numberOfDistanceCodes = 1; /* Amount of non-zero distance codes */
 
                 for (int i = 0; i < 30 /* Ignore the two unused codes from the spec */; i++)
                 {

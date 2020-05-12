@@ -55,7 +55,6 @@ namespace HPIZ
     {
         public string Key { get; set; }
         public DirectoryTree Children { get; set; }
-
         public DirectoryNode()
         {
             Children = new DirectoryTree();

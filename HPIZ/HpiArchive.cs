@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
-using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -14,10 +13,11 @@ namespace HPIZ
         private const int HeaderMarker = 0x49504148; //HAPI Header
         private const int DefaultVersion = 0x00010000;
         private const int NoObfuscationKey = 0;
-        private readonly Stream archiveStream;
+
+        internal readonly Stream archiveStream;
         private readonly int obfuscationKey;
-        private readonly SortedDictionary<string, FileData> entriesDictionary;
-        public ReadOnlyDictionary<string, FileData> Entries { get; }
+        private readonly SortedDictionary<string, FileEntry> entriesDictionary;
+        public ReadOnlyDictionary<string, FileEntry> Entries { get; }
 
         public HpiArchive(Stream stream)
         {
@@ -44,7 +44,6 @@ namespace HPIZ
 
             int directoryStart = archiveReader.ReadInt32();
 
-
             if (obfuscationKey != 0)
             {
                 obfuscationKey = ~((obfuscationKey * 4) | (obfuscationKey >> 6));
@@ -52,7 +51,6 @@ namespace HPIZ
                 archiveReader.BaseStream.Position = 0;
                 var buffer = archiveReader.ReadBytes(directorySize);
                 Clarify(buffer, 0);
-
                 archiveReader = new BinaryReader(new MemoryStream(buffer));
             }
 
@@ -61,8 +59,8 @@ namespace HPIZ
             int rootNumberOfEntries = archiveReader.ReadInt32();
             int rootOffset = archiveReader.ReadInt32();
 
-            entriesDictionary = new SortedDictionary<string, FileData>();
-            Entries = new ReadOnlyDictionary<string, FileData>(entriesDictionary);
+            entriesDictionary = new SortedDictionary<string, FileEntry>();
+            Entries = new ReadOnlyDictionary<string, FileEntry>(entriesDictionary);
 
             GetEntries(rootNumberOfEntries, rootOffset, archiveReader, string.Empty);
 
@@ -73,13 +71,14 @@ namespace HPIZ
                 int chunkCount = entriesDictionary[entry].CalculateChunkQuantity();
                 archiveStream.Position = entriesDictionary[entry].OffsetOfCompressedData;
                 var buffer = archiveReader.ReadBytes(chunkCount * 4);
+                
                 if (obfuscationKey != 0)
-                Clarify(buffer, entriesDictionary[entry].OffsetOfCompressedData);
+                    Clarify(buffer, entriesDictionary[entry].OffsetOfCompressedData);
+                
                 var size = new int[chunkCount];
                 Buffer.BlockCopy(buffer, 0, size, 0, buffer.Length);
 
                 entriesDictionary[entry].ChunkSizes = size;
-
             }
         }
 
@@ -90,16 +89,16 @@ namespace HPIZ
                 reader.BaseStream.Position = EntryListOffset + (i * 9);
 
                 int nameOffset = reader.ReadInt32();
-                int dataOffset = reader.ReadInt32(); //Unused here
+                int dataOffset = reader.ReadInt32(); //Unused
                 bool IsDirectory = reader.ReadBoolean();
                 reader.BaseStream.Position = nameOffset;
-                var fullPath = Path.Combine(parentPath, GetStringASCIINullTerminated(reader));
+                var fullPath = Path.Combine(parentPath, ReadStringCP437NullTerminated(reader));
 
                 if (IsDirectory)
                     GetEntries(reader.ReadInt32(), reader.ReadInt32(), reader, fullPath);
                 else
                 {
-                    FileData fd = new FileData(reader);
+                    FileEntry fd = new FileEntry(reader);
                     entriesDictionary.Add(fullPath, fd);
                 }
             }
@@ -121,7 +120,7 @@ namespace HPIZ
             return totalSize;
         }
 
-        private static void SetEntries(DirectoryTree tree, BinaryWriter bw, Queue<FileData> sequence, int directorySize)
+        private static void SetEntries(DirectoryTree tree, BinaryWriter bw, Queue<FileEntry> sequence, int directorySize)
         {
             bw.Write(tree.Count); //Root Entries number in directory
 
@@ -142,12 +141,12 @@ namespace HPIZ
 
                 int previousPos = (int)bw.BaseStream.Position;
                 bw.BaseStream.Position = posString;
-                SetStringASCIINullTerminated(bw, tree[i].Key);
+                WriteStringCP437NullTerminated(bw, tree[i].Key);
                 if (isDir)
                     SetEntries(tree[i].Children, bw, sequence, directorySize);
                 else
                 {
-                    FileData fd = sequence.Dequeue();
+                    FileEntry fd = sequence.Dequeue();
                     bw.Write(fd.OffsetOfCompressedData + directorySize); //OffsetOfData
                     bw.Write(fd.UncompressedSize); //UncompressedSize 
                     bw.Write((byte)fd.FlagCompression); //FlagCompression 
@@ -156,14 +155,13 @@ namespace HPIZ
             }
         }
 
-
         public static Stream Encode(SortedDictionary<string, List<Chunk>> allFiles)
         {
             var obsCollection = new DirectoryTree();
             foreach (var item in allFiles.Keys)
                 obsCollection.AddEntry(item);
 
-            Queue<FileData> sequence;
+            Queue<FileEntry> sequence;
 
             Stream serial = HpiFile.SerializeChunks(allFiles, out sequence);
 
@@ -189,11 +187,10 @@ namespace HPIZ
             bw.Write("Copyright " + DateTime.Now.Year.ToString() + " Cavedog Entertainment"); //Endfile mandatory string
 
             return bw.BaseStream;
-
         }
 
 
-        private static string GetStringASCIINullTerminated(BinaryReader reader)
+        private static string ReadStringCP437NullTerminated(BinaryReader reader)
         {
             Encoding codePage437 = Encoding.GetEncoding(437);
             var bytes = new Queue<byte>();
@@ -205,24 +202,27 @@ namespace HPIZ
             }
             var asciiCharList = codePage437.GetChars(bytes.ToArray());
 
-            char[] invalids = { '\"', '<', '>', '|', '\0', (Char)1, (Char)2, (Char)3, (Char)4, (Char)5, (Char)6, (Char)7, (Char)8, (Char)9, (Char)10, (Char)11, (Char)12, (Char)13, (Char)14, (Char)15, (Char)16, (Char)17, (Char)18, (Char)19, (Char)20, (Char)21, (Char)22, (Char)23, (Char)24, (Char)25, (Char)26, (Char)27, (Char)28, (Char)29, (Char)30, (Char)31, ':', '*', '?', '\\', '/' };
+            char[] invalids = { '\"', '<', '>', '|', '\0', ':', '*', '?', '\\', '/' ,
+                (Char)1, (Char)2, (Char)3, (Char)4, (Char)5, (Char)6, (Char)7, (Char)8,
+                (Char)9, (Char)10, (Char)11, (Char)12, (Char)13,(Char)14,(Char)15, (Char)16,
+                (Char)17, (Char)18, (Char)19, (Char)20, (Char)21,(Char)22, (Char)23, (Char)24,
+                (Char)25, (Char)26, (Char)27, (Char)28, (Char)29, (Char)30, (Char)31 };
  
             for (int i = 0; i < asciiCharList.Length; i++)
             {
                 if (invalids.Contains((asciiCharList[i])))
-                        asciiCharList[i] = '_';
+                        asciiCharList[i] = '_'; //Replace invalid char with underscore
             }
 
             return new string(asciiCharList);
-
         }
 
 
-        private static void SetStringASCIINullTerminated(BinaryWriter reader, string text)
+        private static void WriteStringCP437NullTerminated(BinaryWriter reader, string text)
         {
             Encoding codePage437 = Encoding.GetEncoding(437);
             reader.Write(codePage437.GetBytes(text));
-            reader.Write(byte.MinValue); //Zero
+            reader.Write(byte.MinValue); //Zero byte to end string
         }
 
         void Clarify(byte[] obfuscatedBytes, int position)
@@ -234,13 +234,13 @@ namespace HPIZ
             }
         }
 
-        public byte[] Extract(FileData file)
+        public byte[] Extract(FileEntry file)
         {
             BinaryReader reader = new BinaryReader(archiveStream);
-            reader.BaseStream.Position = file.OffsetOfCompressedData;
 
             if (file.FlagCompression == CompressionMethod.None)
             {
+                reader.BaseStream.Position = file.OffsetOfCompressedData;
                 var buffer = reader.ReadBytes(file.UncompressedSize);
 
                 if (obfuscationKey != 0)
@@ -251,33 +251,17 @@ namespace HPIZ
             
             if(file.FlagCompression != CompressionMethod.LZ77 && file.FlagCompression != CompressionMethod.ZLib)
                 throw new Exception("Unknown compression method in file entry");
-            
-            var chunkCount = file.CalculateChunkQuantity();
 
-            //Get chunks sizes
+            var chunkCount = file.ChunkSizes.Length;
+            reader.BaseStream.Position = file.OffsetOfCompressedData + (chunkCount * 4);
+
+            //Set chunks array sizes and split stream to chunks and save stream positions
             var chunkBuffer = new List<byte[]>(chunkCount);
-            if (obfuscationKey != 0)
-            {
-                var buffer = reader.ReadBytes(chunkCount * 4);
-                Clarify(buffer, file.OffsetOfCompressedData);
-                var size = new int[chunkCount];
-                Buffer.BlockCopy(buffer, 0, size, 0, buffer.Length);
-                for (int i = 0; i < chunkCount; ++i)
-                    chunkBuffer.Add(new byte[size[i]]);
-            }
-            else
-                for (int i = 0; i < chunkCount; i++)
-                {
-                    var byteSize = reader.ReadInt32();
-                    chunkBuffer.Add(new byte[byteSize]);
-                }
-                    
-
-            //Split stream to chunks and save stream positions
-            var positions = new List<int>(chunkCount);
+            var positions = new Queue<int>(chunkCount);
             for (int i = 0; i < chunkCount; i++)
             {
-                positions.Add( (int) reader.BaseStream.Position);
+                positions.Enqueue( (int) reader.BaseStream.Position);
+                chunkBuffer.Add(new byte[file.ChunkSizes[i]]);
                 reader.Read(chunkBuffer[i], 0, chunkBuffer[i].Length);
             }
 
@@ -286,7 +270,7 @@ namespace HPIZ
             Parallel.For(0, chunkCount, i =>
             {
                 if (obfuscationKey != 0)
-                    Clarify(chunkBuffer[i], positions[i]);
+                    Clarify(chunkBuffer[i], positions.Dequeue());
 
                 outputChunks[i] = new Chunk(chunkBuffer[i]);
                 outputChunks[i].Decompress();
@@ -306,10 +290,24 @@ namespace HPIZ
             return outBytes;
         }
 
+        #region IDisposable Support
+        private bool disposedValue = false;
+
+        protected virtual void Dispose(bool disposing)
+        {
+            if (!disposedValue)
+            {
+                if (disposing)
+                    archiveStream.Dispose();
+
+                disposedValue = true;
+            }
+        }
         public void Dispose()
         {
-            this.archiveStream.Close();
+            Dispose(true);
         }
+        #endregion
     }
 
 

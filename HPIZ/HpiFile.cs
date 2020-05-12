@@ -5,25 +5,18 @@ using System.Threading.Tasks;
 
 namespace HPIZ
 {
-    public class HpiFile
+    public static class HpiFile
     {
-        public HpiFile()
-        {
-            throw new System.NotImplementedException();
-        }
 
-        public HpiArchive Open(string archiveFileName)
+        public static HpiArchive Open(string archiveFileName)
         { 
             using (FileStream fs = new FileStream(archiveFileName, FileMode.Open, FileAccess.Read, FileShare.Read))
               return new HpiArchive(fs);
         }
 
-        public HpiArchive Create(string archiveFileName)
+        public static HpiArchive Create(string archiveFileName)
         {
             throw new System.NotImplementedException();
-
-            using (FileStream fs = new FileStream(archiveFileName, FileMode.Open, FileAccess.Read, FileShare.Read))
-                return new HpiArchive((Stream)fs);
         }
 
         public static void CreateFromDirectory(string sourceDirectoryFullName, string destinationArchiveFileName)
@@ -58,7 +51,7 @@ namespace HPIZ
              {
                  for (int index = 0; index < allFiles[file].Count; index++)
                  {
-                     allFiles[file][index].Compress(true);
+                      allFiles[file][index].Compress(true);
 
                      if (progress != null)
                          progress.Report(file + ":Chunk#" + index.ToString());
@@ -76,10 +69,10 @@ namespace HPIZ
 
         }
 
-        public static Stream SerializeChunks(SortedDictionary<string, List<Chunk>> chunks, out Queue<FileData> sequence)
+        public static Stream SerializeChunks(SortedDictionary<string, List<Chunk>> chunks, out Queue<FileEntry> sequence)
         {
             var bw = new BinaryWriter(new MemoryStream());
-            sequence = new Queue<FileData>(chunks.Count);
+            sequence = new Queue<FileEntry>(chunks.Count);
             foreach (var file in chunks)
             {
                 
@@ -93,7 +86,7 @@ namespace HPIZ
                     chunk.WriteBytes(bw);
                     totalUncompressedSize += chunk.DecompressedSize;
                 }
-                FileData fd = new FileData();
+                FileEntry fd = new FileEntry();
                 fd.UncompressedSize = totalUncompressedSize;
                 fd.OffsetOfCompressedData = position;
                 fd.FlagCompression = CompressionMethod.ZLib;
@@ -111,7 +104,7 @@ namespace HPIZ
             foreach (var file in fileList)
             {
                 string fullName = Path.Combine(sourceDirectoryFullName, file);
-                using (FileStream fs = new FileStream(fullName, FileMode.Open, FileAccess.Read, FileShare.Read, chunkSize, FileOptions.SequentialScan))
+                using (FileStream fs = new FileStream(fullName, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, chunkSize, FileOptions.SequentialScan))
                 {
                     if (fs.Length > Int32.MaxValue) throw new Exception("File is too large." + file + "Maximum total size is 2GB (2 147 483 647 bytes).");
                     int dataLenght = (int) fs.Length;
@@ -134,7 +127,7 @@ namespace HPIZ
         }
 
 
-        public void ExtractToDirectory(string sourceArchiveFileName, string destinationDirectoryName)
+        public static void ExtractToDirectory(string sourceArchiveFileName, string destinationDirectoryName)
         {
             throw new System.NotImplementedException();
         }

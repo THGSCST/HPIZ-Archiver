@@ -3,24 +3,25 @@ using System.Linq;
 
 namespace HPIZ
 {
-    public class FileData
+    public class FileEntry
     {
-        private HpiArchive parentArchive;
         public int OffsetOfCompressedData;
         public int UncompressedSize;
         public CompressionMethod FlagCompression;
         public int[] ChunkSizes;
 
-        public FileData(BinaryReader reader)
+
+        public FileEntry(BinaryReader reader)
         {
             OffsetOfCompressedData = reader.ReadInt32();
             UncompressedSize = reader.ReadInt32();
-            FlagCompression = (CompressionMethod)reader.ReadByte();
+            FlagCompression = (CompressionMethod) reader.ReadByte();
         }
 
-        public FileData()
+        public FileEntry()
         {
         }
+
 
         public int CompressedSizeCount()
         {

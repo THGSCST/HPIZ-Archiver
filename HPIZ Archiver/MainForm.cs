@@ -23,51 +23,6 @@ namespace HPIZArchiver
             compressionLevelComboBox.Enabled = false;
         }
 
-
-        private async void toolStripCompressButton_Click(object sender, EventArgs e)
-        {
-            if (dialogSaveHpi.ShowDialog() == DialogResult.OK)
-            {
-                toolStrip.Enabled = false;
-                listViewFiles.Enabled = false;
-
-                firstStatusLabel.Text = "Compressing... Last processed:";
-
-                //Calculate chunk total
-                var fileList = new SortedSet<string>();
-                int chunkTotal = 0;
-                foreach (ListViewItem item in listViewFiles.CheckedItems)
-                {
-                    fileList.Add(item.Text);
-                    int size = Int32.Parse(item.SubItems[1].Text, NumberStyles.AllowThousands);
-                    chunkTotal += (size / 65536) + (size % 65536 == 0 ? 0 : 1);
-                }
-                progressBar.Maximum = chunkTotal + 1;
-                progressBar.Value = 0;
-                progressBar.Visible = true;
-                progressBar.Style = ProgressBarStyle.Continuous;
-
-                var progress = new Progress<string>(last =>
-                {
-                    secondStatusLabel.Text = last;
-                    progressBar.Value++;
-                });
-
-                
-
-                var timer = new Stopwatch();
-                timer.Start();
-
-                await Task.Run(() => HpiFile.CreateFromFileList( fileList, toolStripPathTextBox.Text, dialogSaveHpi.FileName, progress));
-
-                timer.Stop();
-
-                firstStatusLabel.Text = String.Format("Done! Elapsed time: {0}m {1}s {2}ms", timer.Elapsed.Minutes,
-                timer.Elapsed.Seconds, timer.Elapsed.Milliseconds);
-                secondStatusLabel.Text = dialogSaveHpi.FileName;
-                toolStrip.Enabled = true;
-            }
-        }
         
 
         private void PopulateList(List<ListViewItem> collection)
@@ -101,7 +56,7 @@ namespace HPIZArchiver
             var collection = await Task.Run(() =>
             {
                 //System.Threading.Thread.Sleep(10000);
-                using (HpiArchive hpia = new HpiArchive( File.Open(fullPath, FileMode.Open)))
+                using (HpiArchive hpia = HpiFile.Open(fullPath))
                 {
                     long totalSize = 0;
                     long totalCompressedSize = 0;
@@ -150,15 +105,15 @@ namespace HPIZArchiver
 
                 var dirInfo = await Task.Run(() => OpenDirectoryandLoadInfo(dialogOpenFolder.SelectedPath));
 
-                PopulateList(dirInfo.Item1);
+                PopulateList(dirInfo.First().Value);
                 toolStripCompressButton.Enabled = true;
-                firstStatusLabel.Text = dirInfo.Item2;
+                firstStatusLabel.Text = dirInfo.First().Key;
                 progressBar.Visible = false;
                 toolStrip.Enabled = true;
             }
         }
 
-        public async Task<(List<ListViewItem>, string)> OpenDirectoryandLoadInfo(string fullPath)
+        public Dictionary<string, List<ListViewItem>> OpenDirectoryandLoadInfo(string fullPath)
         {
                 long totalSize = 0;
                 var fileList = Directory.GetFiles(fullPath, "*", SearchOption.AllDirectories);
@@ -166,9 +121,11 @@ namespace HPIZArchiver
                 var listColection = new List<ListViewItem>(fileList.Length);
                 foreach (var file in fileList)
                 {
-                    ListViewItem lvi = new ListViewItem(file.Substring(fullPath.Length + 1) );
                     var finfo = new FileInfo(file);
+                    if(finfo.Length > Int32.MaxValue)
+                    throw new Exception(finfo.Name + " is too large. File maximum size is 2GB (2 147 483 647 bytes).");
                     totalSize += finfo.Length;
+                    ListViewItem lvi = new ListViewItem(file.Substring(fullPath.Length + 1) );
                     lvi.SubItems.Add(finfo.Length.ToString("N0"));
                     listColection.Add(lvi);
                     lvi.Checked = true;
@@ -177,7 +134,10 @@ namespace HPIZArchiver
                 string totalsText =
                     fileList.Length.ToString() + " file(s), " + SizeSuffix(totalSize) + " (uncompressed)";
 
-            return (listColection, totalsText);
+            var result = new Dictionary<string, List<ListViewItem>>();
+            result.Add(totalsText, listColection);
+
+            return result;
         }
 
         private async void toolStripExtractButton_Click(object sender, EventArgs e)
@@ -259,7 +219,7 @@ namespace HPIZArchiver
 
         public string SizeSuffix(Int64 value, int decimalPlaces = 1)
             {
-                string[] SizeSuffixes = { "bytes", "KB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB" };
+                string[] SizeSuffixes = { "bytes", "KB", "MB", "GB", "TB" };
                 if (decimalPlaces < 0) { throw new ArgumentOutOfRangeException("decimalPlaces"); }
                 if (value < 0) { return "-" + SizeSuffix(-value); }
                 if (value == 0) { return string.Format("{0:n" + decimalPlaces + "} bytes", 0); }
@@ -284,6 +244,50 @@ namespace HPIZArchiver
                     SizeSuffixes[mag]);
             }
 
+        private async void compressCheckedFilesToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            if (dialogSaveHpi.ShowDialog() == DialogResult.OK)
+            {
+                toolStrip.Enabled = false;
+                listViewFiles.Enabled = false;
+
+                firstStatusLabel.Text = "Compressing... Last processed:";
+
+                //Calculate chunk total
+                var fileList = new SortedSet<string>();
+                int chunkTotal = 0;
+                foreach (ListViewItem item in listViewFiles.CheckedItems)
+                {
+                    fileList.Add(item.Text);
+                    int size = Int32.Parse(item.SubItems[1].Text, NumberStyles.AllowThousands);
+                    chunkTotal += (size / 65536) + (size % 65536 == 0 ? 0 : 1);
+                }
+                progressBar.Maximum = chunkTotal + 1;
+                progressBar.Value = 0;
+                progressBar.Visible = true;
+                progressBar.Style = ProgressBarStyle.Continuous;
+
+                var progress = new Progress<string>(last =>
+                {
+                    secondStatusLabel.Text = last;
+                    progressBar.Value++;
+                });
+
+
+
+                var timer = new Stopwatch();
+                timer.Start();
+
+                await Task.Run(() => HpiFile.CreateFromFileList(fileList, toolStripPathTextBox.Text, dialogSaveHpi.FileName, progress));
+
+                timer.Stop();
+
+                firstStatusLabel.Text = String.Format("Done! Elapsed time: {0}h {1}m {2}s {3}ms", timer.Elapsed.Hours, timer.Elapsed.Minutes,
+                timer.Elapsed.Seconds, timer.Elapsed.Milliseconds);
+                secondStatusLabel.Text = dialogSaveHpi.FileName;
+                toolStrip.Enabled = true;
+            }
+        }
     }
 
     } 

@@ -7,7 +7,6 @@ namespace HPIZ.Compression
 {
     public static class LZ77
     {
-
         public static void Decompress(byte[] input, byte[] output)
         {
             if(input == null || output == null)

@@ -63,9 +63,9 @@ namespace HPIZArchiver.Properties {
         /// <summary>
         ///   Consulta um recurso localizado do tipo System.Drawing.Bitmap.
         /// </summary>
-        internal static System.Drawing.Bitmap Compress_48x {
+        internal static System.Drawing.Bitmap Compress_32x {
             get {
-                object obj = ResourceManager.GetObject("Compress_48x", resourceCulture);
+                object obj = ResourceManager.GetObject("Compress_32x", resourceCulture);
                 return ((System.Drawing.Bitmap)(obj));
             }
         }
@@ -73,9 +73,19 @@ namespace HPIZArchiver.Properties {
         /// <summary>
         ///   Consulta um recurso localizado do tipo System.Drawing.Bitmap.
         /// </summary>
-        internal static System.Drawing.Bitmap Extract_48x {
+        internal static System.Drawing.Bitmap Extract_32x {
             get {
-                object obj = ResourceManager.GetObject("Extract_48x", resourceCulture);
+                object obj = ResourceManager.GetObject("Extract_32x", resourceCulture);
+                return ((System.Drawing.Bitmap)(obj));
+            }
+        }
+        
+        /// <summary>
+        ///   Consulta um recurso localizado do tipo System.Drawing.Bitmap.
+        /// </summary>
+        internal static System.Drawing.Bitmap Folder_32x {
+            get {
+                object obj = ResourceManager.GetObject("Folder_32x", resourceCulture);
                 return ((System.Drawing.Bitmap)(obj));
             }
         }
@@ -87,16 +97,6 @@ namespace HPIZArchiver.Properties {
             get {
                 object obj = ResourceManager.GetObject("hpiz", resourceCulture);
                 return ((System.Drawing.Icon)(obj));
-            }
-        }
-        
-        /// <summary>
-        ///   Consulta um recurso localizado do tipo System.Drawing.Bitmap.
-        /// </summary>
-        internal static System.Drawing.Bitmap SearchFolderOpened_48x {
-            get {
-                object obj = ResourceManager.GetObject("SearchFolderOpened_48x", resourceCulture);
-                return ((System.Drawing.Bitmap)(obj));
             }
         }
     }
