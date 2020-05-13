@@ -14,3 +14,6 @@ A new tool for a great old game. View, extract and compress HPI files faster usi
 
 ## Dependencies
 Requires NET Framework 4.5 or higher.
+
+## Screenshot
+![Screenshot](screenshot.png)
