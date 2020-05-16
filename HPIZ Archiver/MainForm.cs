@@ -18,12 +18,10 @@ namespace HPIZArchiver
         }
         private void MainForm_Load(object sender, EventArgs e)
         {
-            // Disable, Not Implemented yet
-            compressionLevelComboBox.SelectedIndex = 1;
-            compressionLevelComboBox.Enabled = false;
+            compressionLevelComboBox.ComboBox.DataSource = Enum.GetValues(typeof(CompressionFlavor));
+            compressionLevelComboBox.ComboBox.BindingContext = this.BindingContext;
+            compressionLevelComboBox.SelectedIndex = 4;
         }
-
-        
 
         private void PopulateList(List<ListViewItem> collection)
         {
@@ -262,6 +260,10 @@ namespace HPIZArchiver
                     int size = Int32.Parse(item.SubItems[1].Text, NumberStyles.AllowThousands);
                     chunkTotal += (size / 65536) + (size % 65536 == 0 ? 0 : 1);
                 }
+
+                CompressionFlavor flavor;
+                Enum.TryParse(compressionLevelComboBox.Text, out flavor);
+
                 progressBar.Maximum = chunkTotal + 1;
                 progressBar.Value = 0;
                 progressBar.Visible = true;
@@ -278,7 +280,7 @@ namespace HPIZArchiver
                 var timer = new Stopwatch();
                 timer.Start();
 
-                await Task.Run(() => HpiFile.CreateFromFileList(fileList, toolStripPathTextBox.Text, dialogSaveHpi.FileName, progress));
+                await Task.Run(() => HpiFile.CreateFromFileList(fileList, toolStripPathTextBox.Text, dialogSaveHpi.FileName, progress, flavor));
 
                 timer.Stop();
 
@@ -286,8 +288,10 @@ namespace HPIZArchiver
                 timer.Elapsed.Seconds, timer.Elapsed.Milliseconds);
                 secondStatusLabel.Text = dialogSaveHpi.FileName;
                 toolStrip.Enabled = true;
+                toolStripCompressButton.Enabled = false;
             }
         }
+
     }
 
     } 

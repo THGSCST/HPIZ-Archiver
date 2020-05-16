@@ -10,9 +10,9 @@ namespace HPIZ
 {
     public class HpiArchive : IDisposable
     {
-        private const int HeaderMarker = 0x49504148; //HAPI Header
-        private const int DefaultVersion = 0x00010000;
-        private const int NoObfuscationKey = 0;
+        internal const int HeaderMarker = 0x49504148; //HAPI Header
+        internal const int DefaultVersion = 0x00010000;
+        internal const int NoObfuscationKey = 0;
 
         internal readonly Stream archiveStream;
         private readonly int obfuscationKey;
@@ -66,19 +66,25 @@ namespace HPIZ
 
             archiveReader = new BinaryReader(archiveStream);
 
+
             foreach (var entry in entriesDictionary.Keys)
             {
-                int chunkCount = entriesDictionary[entry].CalculateChunkQuantity();
-                archiveStream.Position = entriesDictionary[entry].OffsetOfCompressedData;
-                var buffer = archiveReader.ReadBytes(chunkCount * 4);
-                
-                if (obfuscationKey != 0)
-                    Clarify(buffer, entriesDictionary[entry].OffsetOfCompressedData);
-                
-                var size = new int[chunkCount];
-                Buffer.BlockCopy(buffer, 0, size, 0, buffer.Length);
+                if (entriesDictionary[entry].FlagCompression != CompressionMethod.None)
+                {
+                    int chunkCount = entriesDictionary[entry].CalculateChunkQuantity();
+                    archiveStream.Position = entriesDictionary[entry].OffsetOfCompressedData;
+                    var buffer = archiveReader.ReadBytes(chunkCount * 4);
 
-                entriesDictionary[entry].ChunkSizes = size;
+                    if (obfuscationKey != 0)
+                        Clarify(buffer, entriesDictionary[entry].OffsetOfCompressedData);
+
+                    var size = new int[chunkCount];
+                    Buffer.BlockCopy(buffer, 0, size, 0, buffer.Length);
+
+                    entriesDictionary[entry].ChunkSizes = size;
+                }
+                else
+                    entriesDictionary[entry].ChunkSizes = new int[] { entriesDictionary[entry].UncompressedSize}; //To optimize
             }
         }
 
@@ -104,7 +110,7 @@ namespace HPIZ
             }
         }
 
-        private static int GetDirectorySize(DirectoryTree tree)
+        internal static int GetDirectorySize(DirectoryTree tree)
         {
             int totalSize = 8;
 
@@ -120,7 +126,7 @@ namespace HPIZ
             return totalSize;
         }
 
-        private static void SetEntries(DirectoryTree tree, BinaryWriter bw, Queue<FileEntry> sequence, int directorySize)
+        internal static void SetEntries(DirectoryTree tree, BinaryWriter bw, Queue<FileEntry> sequence, int directorySize)
         {
             bw.Write(tree.Count); //Root Entries number in directory
 
@@ -155,39 +161,7 @@ namespace HPIZ
             }
         }
 
-        public static Stream Encode(SortedDictionary<string, List<Chunk>> allFiles)
-        {
-            var obsCollection = new DirectoryTree();
-            foreach (var item in allFiles.Keys)
-                obsCollection.AddEntry(item);
-
-            Queue<FileEntry> sequence;
-
-            Stream serial = HpiFile.SerializeChunks(allFiles, out sequence);
-
-            BinaryWriter bw = new BinaryWriter(new MemoryStream());
-
-            bw.Write(HeaderMarker);
-            bw.Write(DefaultVersion);
-
-            int directorySize = GetDirectorySize(obsCollection) + 20;
-            bw.Write(directorySize);
-
-            bw.Write(NoObfuscationKey);
-
-            int directoryStart = 20;
-            bw.Write(directoryStart); //Directory Start Pos20 point to next
-
-            SetEntries(obsCollection, bw, sequence, directorySize);
-
-            serial.Position = 0;
-            bw.BaseStream.Position = bw.BaseStream.Length;
-            serial.CopyTo(bw.BaseStream);
-
-            bw.Write("Copyright " + DateTime.Now.Year.ToString() + " Cavedog Entertainment"); //Endfile mandatory string
-
-            return bw.BaseStream;
-        }
+      
 
 
         private static string ReadStringCP437NullTerminated(BinaryReader reader)
@@ -200,7 +174,7 @@ namespace HPIZ
                 bytes.Enqueue(b);
                 b = reader.ReadByte();
             }
-            var asciiCharList = codePage437.GetChars(bytes.ToArray());
+            var characters = codePage437.GetChars(bytes.ToArray());
 
             char[] invalids = { '\"', '<', '>', '|', '\0', ':', '*', '?', '\\', '/' ,
                 (Char)1, (Char)2, (Char)3, (Char)4, (Char)5, (Char)6, (Char)7, (Char)8,
@@ -208,15 +182,14 @@ namespace HPIZ
                 (Char)17, (Char)18, (Char)19, (Char)20, (Char)21,(Char)22, (Char)23, (Char)24,
                 (Char)25, (Char)26, (Char)27, (Char)28, (Char)29, (Char)30, (Char)31 };
  
-            for (int i = 0; i < asciiCharList.Length; i++)
+            for (int i = 0; i < characters.Length; i++)
             {
-                if (invalids.Contains((asciiCharList[i])))
-                        asciiCharList[i] = '_'; //Replace invalid char with underscore
+                if (invalids.Contains((characters[i])))
+                        characters[i] = '_'; //Replace invalid char with underscore
             }
 
-            return new string(asciiCharList);
+            return new string(characters);
         }
-
 
         private static void WriteStringCP437NullTerminated(BinaryWriter reader, string text)
         {
@@ -225,9 +198,11 @@ namespace HPIZ
             reader.Write(byte.MinValue); //Zero byte to end string
         }
 
-        void Clarify(byte[] obfuscatedBytes, int position)
+        void Clarify(byte[] obfuscatedBytes, int position, int start = 0, int end = 0)
         {
-            for (int i = 0; i < obfuscatedBytes.Length; ++i)
+            if (end == 0) end = obfuscatedBytes.Length;
+            else end = end + start;
+            for (int i = start; i < end; ++i)
             {
                 obfuscatedBytes[i] = (byte) ~(position ^ obfuscationKey ^ obfuscatedBytes[i]);
                 position++;
@@ -236,56 +211,44 @@ namespace HPIZ
 
         public byte[] Extract(FileEntry file)
         {
+
             BinaryReader reader = new BinaryReader(archiveStream);
 
             if (file.FlagCompression == CompressionMethod.None)
             {
                 reader.BaseStream.Position = file.OffsetOfCompressedData;
-                var buffer = reader.ReadBytes(file.UncompressedSize);
+                var uncompressedOutput = reader.ReadBytes(file.UncompressedSize);
 
                 if (obfuscationKey != 0)
-                    Clarify(buffer, file.OffsetOfCompressedData);
+                    Clarify(uncompressedOutput, file.OffsetOfCompressedData);
 
-                return buffer;
+                return uncompressedOutput;
             }
             
             if(file.FlagCompression != CompressionMethod.LZ77 && file.FlagCompression != CompressionMethod.ZLib)
                 throw new Exception("Unknown compression method in file entry");
 
             var chunkCount = file.ChunkSizes.Length;
-            reader.BaseStream.Position = file.OffsetOfCompressedData + (chunkCount * 4);
+            var readPositions = new int[chunkCount];
+            for (int i = 1; i < chunkCount; i++)
+                    readPositions[i] = readPositions[i - 1] + file.ChunkSizes[i - 1];
+            
+            int strReadPositions = file.OffsetOfCompressedData + (chunkCount * 4);
+            reader.BaseStream.Position = strReadPositions;
+            var buffer = reader.ReadBytes(file.ChunkSizes.Sum());
 
-            //Set chunks array sizes and split stream to chunks and save stream positions
-            var chunkBuffer = new List<byte[]>(chunkCount);
-            var positions = new Queue<int>(chunkCount);
-            for (int i = 0; i < chunkCount; i++)
-            {
-                positions.Enqueue( (int) reader.BaseStream.Position);
-                chunkBuffer.Add(new byte[file.ChunkSizes[i]]);
-                reader.Read(chunkBuffer[i], 0, chunkBuffer[i].Length);
-            }
+            var outBytes = new byte[file.UncompressedSize];
 
-            var outputChunks = new Chunk[chunkCount];
-
+            // Parallelize chunk decompression
             Parallel.For(0, chunkCount, i =>
             {
                 if (obfuscationKey != 0)
-                    Clarify(chunkBuffer[i], positions.Dequeue());
+                    Clarify(buffer, readPositions[i] + strReadPositions, readPositions[i], file.ChunkSizes[i]);
 
-                outputChunks[i] = new Chunk(chunkBuffer[i]);
-                outputChunks[i].Decompress();
-            });
+                var decompressedChunk = Chunk.Decompress(new MemoryStream(buffer, readPositions[i], file.ChunkSizes[i]));
 
-            var outBytes = new byte[file.UncompressedSize];
-            int copyPosition = 0;
-            for (int i = 0; i < chunkCount; i++)
-            {
-                Array.Copy(outputChunks[i].Data, 0, outBytes, copyPosition, outputChunks[i].Data.Length);
-                copyPosition += outputChunks[i].Data.Length;
-            }
-
-            if(file.UncompressedSize != copyPosition)
-                throw new Exception("Bad output size");
+                Buffer.BlockCopy(decompressedChunk, 0, outBytes, i * Chunk.MaxSize, decompressedChunk.Length);
+            }); // Parallel.For
 
             return outBytes;
         }

@@ -10,7 +10,6 @@ namespace HPIZ
         public CompressionMethod FlagCompression;
         public int[] ChunkSizes;
 
-
         public FileEntry(BinaryReader reader)
         {
             OffsetOfCompressedData = reader.ReadInt32();
@@ -22,10 +21,19 @@ namespace HPIZ
         {
         }
 
+        public FileEntry(int uncompressedSize, CompressionMethod flagCompression, int[] chunkSizes)
+        {
+            UncompressedSize = uncompressedSize;
+            FlagCompression = flagCompression;
+            ChunkSizes = chunkSizes;
+        }
 
         public int CompressedSizeCount()
         {
-            return ChunkSizes.Sum();
+            if (FlagCompression == CompressionMethod.None)
+                return UncompressedSize;
+            else
+                return ChunkSizes.Sum() + ChunkSizes.Length * 4 + Chunk.MinSize;
         }
 
         public float Ratio()

@@ -1,125 +1,114 @@
 ﻿using CompressSharper.Zopfli;
-using HPIZ.Compression;
 using System;
 using System.IO;
 using System.IO.Compression;
-using System.Linq;
-using System.Windows.Forms;
 
 namespace HPIZ
 {
-    public class Chunk
+    internal static class Chunk
     {
         private const int Header = 0x48535153; //SQSH (SQUASH)
         private const byte DefaultVersion = 2; //Always 2?
-        public const int SizeOfChunk = 19;
+        public const int MinSize = 19;
+        public const int MaxSize = 65536;
+        private const byte NoObfuscation = 0;
 
-        public CompressionMethod FlagCompression;
-        public bool IsObfuscated;
-        public int CompressedSize; // the length of the compressed data
-        public int DecompressedSize; // the length of the decompressed data
-        public byte[] Data;
-        public Chunk(byte[] chunkData)
+        public static int ObtainDecompressedSize(byte[] chunk)
         {
-            BinaryReader hr = new BinaryReader(new MemoryStream(chunkData));
-            int headerMark = hr.ReadInt32();
+            return BitConverter.ToInt32(chunk, 11);
+        }
+
+        internal static byte[] Compress(byte[] bytesToCompress, CompressionFlavor flavor)
+        {
+            if (bytesToCompress == null)
+                throw new InvalidDataException("Cannot compress null array");
+
+            if (flavor == CompressionFlavor.StoreUncompressed)
+                throw new InvalidOperationException("Chunk format cannot be used for uncompressed data");
+
+            MemoryStream output = new MemoryStream(bytesToCompress.Length);
+            BinaryWriter writer = new BinaryWriter(output);
+
+            writer.Write(Chunk.Header);
+            writer.Write(Chunk.DefaultVersion);
+            writer.Write((byte)CompressionMethod.ZLib);
+            writer.Write(NoObfuscation);
+
+            using (MemoryStream compressedStream = new MemoryStream(bytesToCompress.Length))
+            {
+                compressedStream.WriteByte(0x78); //ZLib header first byte
+                compressedStream.WriteByte(0xDA); //ZLib header second byte
+
+                switch (flavor)
+                {
+                    case CompressionFlavor.ZLibDeflate:
+                        using (DeflateStream deflateStream = new DeflateStream(compressedStream, CompressionMode.Compress, true))
+                            deflateStream.Write(bytesToCompress, 0, bytesToCompress.Length);
+                        break;
+                    case CompressionFlavor.i5ZopfliDeflate:
+                    case CompressionFlavor.i10ZopfliDeflate:
+                    case CompressionFlavor.i15ZopfliDeflate:
+                        ZopfliDeflater zstream = new ZopfliDeflater(compressedStream);
+                        zstream.NumberOfIterations = (int)flavor;
+                        zstream.MasterBlockSize = 0;
+                        zstream.Deflate(bytesToCompress, true);
+                        break;
+                    default:
+                        throw new InvalidOperationException("Unknow compression flavor");
+                }
+                var compressedDataArray = compressedStream.ToArray(); //Change to stream
+                int checksum = ComputeChecksum(compressedDataArray); //Change to stream
+
+                writer.Write(compressedDataArray.Length);
+                writer.Write(bytesToCompress.Length);
+                writer.Write(checksum);
+                writer.Write(compressedDataArray);
+            }
+            return output.ToArray();
+        }
+
+        internal static byte[] Decompress(MemoryStream bytesToDecompress)
+        {
+            BinaryReader reader = new BinaryReader(bytesToDecompress);
+            int headerMark = reader.ReadInt32();
             if (headerMark != Chunk.Header) throw new InvalidDataException("Invalid Chunk Header");
 
-            int version = hr.ReadByte();
+            int version = reader.ReadByte();
             if (version != DefaultVersion) throw new NotImplementedException("Unsuported Chunk Version");
 
-            FlagCompression = (CompressionMethod)hr.ReadByte();
+            CompressionMethod FlagCompression = (CompressionMethod)reader.ReadByte();
             if (FlagCompression != CompressionMethod.LZ77 && FlagCompression != CompressionMethod.ZLib)
-                throw new Exception("Unknown compression method in Chunk header");
+                throw new InvalidOperationException("Unknown compression method in Chunk header");
 
-            IsObfuscated = hr.ReadBoolean();
-            CompressedSize = hr.ReadInt32();
-            DecompressedSize = hr.ReadInt32();
+            bool IsObfuscated = reader.ReadBoolean();
+            int CompressedSize = reader.ReadInt32();
+            int DecompressedSize = reader.ReadInt32();
+            int checksum = reader.ReadInt32();
 
-            if (FlagCompression == CompressionMethod.None && CompressedSize != DecompressedSize)
-                throw new Exception("Chunk size inconsistent with decompressed and compressed sizes");
+            byte[] compressedData = reader.ReadBytes(CompressedSize);
 
-            int checksum = hr.ReadInt32();
-
-            Data = new byte[CompressedSize];
-            hr.Read(Data, 0, CompressedSize);
-
-
-            if (ComputeChecksum() != checksum) throw new InvalidDataException("Bad Chunk Checksum");
+            if (ComputeChecksum(compressedData) != checksum) throw new InvalidDataException("Bad Chunk Checksum");
 
             if (IsObfuscated)
                 for (int j = 0; j < CompressedSize; ++j)
-                    Data[j] = (byte)((Data[j] - j) ^ j);
+                    compressedData[j] = (byte)((compressedData[j] - j) ^ j);
+
+            byte[] outputBuffer = new byte[DecompressedSize];
+            if (FlagCompression == CompressionMethod.LZ77)
+                LZ77.Decompress(compressedData, outputBuffer);
+
+            if (FlagCompression == CompressionMethod.ZLib)
+                ZLibDeflater.Decompress(compressedData, outputBuffer);
+
+            return outputBuffer;
         }
 
-        public Chunk(byte[] data, bool toREMOVE)
-        {
-            Data = data;
-            FlagCompression = CompressionMethod.None;
-            IsObfuscated = false;
-            CompressedSize = data.Length;
-            DecompressedSize = data.Length;
-        }
-
-        private int ComputeChecksum()
+        private static int ComputeChecksum(byte[] data)
         {
             int sum = 0;
-            for (int i = 0; i < Data.Length; ++i)
-                sum += Data[i];
+            for (int i = 0; i < data.Length; ++i)
+                sum += data[i];
             return sum;
-        }
-
-        public void WriteBytes(BinaryWriter writer)
-        {
-            writer.Write(Chunk.Header);
-            writer.Write(Chunk.DefaultVersion);
-            writer.Write((byte)FlagCompression);
-            writer.Write(IsObfuscated);
-            writer.Write(CompressedSize);
-            writer.Write(DecompressedSize);
-            writer.Write(ComputeChecksum());
-            writer.Write(Data);
-        }
-
-        public void Compress(bool useZopfli)
-        {
-
-            using (MemoryStream ms = new MemoryStream(Data.Length))
-            {
-                ms.WriteByte(0x78); //ZLib header first byte
-                ms.WriteByte(0xDA); //ZLib header second byte
-                if (useZopfli)
-                {
-                    ZopfliDeflater zstream = new ZopfliDeflater(ms);
-
-                    zstream.NumberOfIterations = 10;
-                    zstream.MasterBlockSize = 0;
-                    zstream.Deflate(Data, true);
-                }
-                else 
-                    using (DeflateStream deflateStream = new DeflateStream(ms, CompressionMode.Compress, true))
-                        deflateStream.Write(Data, 0, Data.Length);
-                    
-                Data = ms.ToArray();
-                CompressedSize = Data.Length;
-                FlagCompression = CompressionMethod.ZLib;  
-                }
-            }
-
-        public void Decompress()
-        {
-            var outputBuffer = new byte[DecompressedSize];
-            if (FlagCompression == CompressionMethod.LZ77)
-            {
-                LZ77.Decompress(Data, outputBuffer);
-                Data = outputBuffer;
-            }
-            if (FlagCompression == CompressionMethod.ZLib)
-            {
-                ZLibDeflater.Decompress(Data, outputBuffer);
-                Data = outputBuffer;
-            }
-            FlagCompression = CompressionMethod.None;
         }
 
     }

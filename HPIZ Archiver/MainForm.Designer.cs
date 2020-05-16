@@ -114,13 +114,8 @@
             // compressionLevelComboBox
             // 
             this.compressionLevelComboBox.AutoToolTip = true;
+            this.compressionLevelComboBox.CausesValidation = false;
             this.compressionLevelComboBox.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
-            this.compressionLevelComboBox.Items.AddRange(new object[] {
-            "Zopfli i15",
-            "Zopfli i10",
-            "Zopfli i5",
-            "Zopfli i1",
-            "ZLib Deflate"});
             this.compressionLevelComboBox.Name = "compressionLevelComboBox";
             this.compressionLevelComboBox.Size = new System.Drawing.Size(160, 28);
             this.compressionLevelComboBox.ToolTipText = "Select compression level";
@@ -210,7 +205,7 @@
             // progressBar
             // 
             this.progressBar.Name = "progressBar";
-            this.progressBar.Size = new System.Drawing.Size(120, 18);
+            this.progressBar.Size = new System.Drawing.Size(100, 18);
             this.progressBar.Style = System.Windows.Forms.ProgressBarStyle.Continuous;
             this.progressBar.Visible = false;
             // 
@@ -254,26 +249,26 @@
             // columnHeaderName
             // 
             this.columnHeaderName.Text = "Full Name";
-            this.columnHeaderName.Width = 336;
+            this.columnHeaderName.Width = 333;
             // 
             // columnHeaderSize
             // 
             this.columnHeaderSize.Text = "Size";
             this.columnHeaderSize.TextAlign = System.Windows.Forms.HorizontalAlignment.Right;
-            this.columnHeaderSize.Width = 89;
+            this.columnHeaderSize.Width = 90;
             // 
             // columnCompressed
             // 
             this.columnCompressed.Text = "Compressed";
             this.columnCompressed.TextAlign = System.Windows.Forms.HorizontalAlignment.Right;
-            this.columnCompressed.Width = 88;
+            this.columnCompressed.Width = 90;
             // 
             // columnRatio
             // 
             this.columnRatio.Tag = "";
             this.columnRatio.Text = "Ratio";
             this.columnRatio.TextAlign = System.Windows.Forms.HorizontalAlignment.Right;
-            this.columnRatio.Width = 43;
+            this.columnRatio.Width = 48;
             // 
             // dialogOpenFolder
             // 

@@ -10,6 +10,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="$(MSBuildThisFileDirectory)Chunk.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Compression\CompressionFlavor.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Compression\CompressionMethod.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Compression\ZLibDeflater.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Compression\LZ77.cs" />

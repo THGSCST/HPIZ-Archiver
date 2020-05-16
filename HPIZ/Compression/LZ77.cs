@@ -3,7 +3,7 @@ using System.Collections;
 using System.IO;
 using System.Text;
 
-namespace HPIZ.Compression
+namespace HPIZ
 {
     public static class LZ77
     {
