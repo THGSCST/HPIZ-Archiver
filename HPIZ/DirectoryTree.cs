@@ -14,7 +14,7 @@ namespace HPIZ
 
         public void AddEntry(string entry)
         {
-            AddEntry(entry, 0);
+             AddEntry(entry, 0);
         }
 
         /// <summary>
@@ -39,7 +39,6 @@ namespace HPIZ
             {
                 return;
             }
-
             DirectoryNode item = this.FirstOrDefault(n => n.Key == key);
             if (item == null)
             {
@@ -48,6 +47,26 @@ namespace HPIZ
             }
             // Now add the rest to the new item's children
             item.Children.AddEntry(entry, endIndex + 1);
+        }
+
+        public int CalculateSize()
+        {
+            return CalculateSize(this);
+        }
+        private int CalculateSize(DirectoryTree tree)
+        {
+            int totalSize = 8;
+
+            foreach (var node in tree)
+            {
+                totalSize += 9;
+                totalSize += node.Key.Length + 1;
+                if (node.Children.Count != 0)
+                    totalSize += CalculateSize(node.Children);
+                else
+                    totalSize += 9;
+            }
+            return totalSize;
         }
     }
 

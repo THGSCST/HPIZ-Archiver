@@ -12,6 +12,7 @@
     <Compile Include="$(MSBuildThisFileDirectory)Chunk.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Compression\CompressionFlavor.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Compression\CompressionMethod.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Compression\Strategy.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Compression\ZLibDeflater.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Compression\LZ77.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)DirectoryTree.cs" />
@@ -19,5 +20,6 @@
     <Compile Include="$(MSBuildThisFileDirectory)HpiArchive.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)HpiFile.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Compression\ZopfliDeflater.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)PathCollection.cs" />
   </ItemGroup>
 </Project>

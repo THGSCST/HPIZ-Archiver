@@ -13,6 +13,7 @@ namespace HPIZ
         internal const int HeaderMarker = 0x49504148; //HAPI Header
         internal const int DefaultVersion = 0x00010000;
         internal const int NoObfuscationKey = 0;
+        internal const int DefaultHeaderSize = 20;
 
         internal readonly Stream archiveStream;
         private readonly int obfuscationKey;
@@ -46,8 +47,8 @@ namespace HPIZ
 
             if (obfuscationKey != 0)
             {
-                obfuscationKey = ~((obfuscationKey * 4) | (obfuscationKey >> 6));
-
+                obfuscationKey = ~(obfuscationKey << 2 | obfuscationKey >> 6);
+                
                 archiveReader.BaseStream.Position = 0;
                 var buffer = archiveReader.ReadBytes(directorySize);
                 Clarify(buffer, 0);
@@ -81,10 +82,10 @@ namespace HPIZ
                     var size = new int[chunkCount];
                     Buffer.BlockCopy(buffer, 0, size, 0, buffer.Length);
 
-                    entriesDictionary[entry].ChunkSizes = size;
+                    entriesDictionary[entry].compressedChunkSizes = size;
                 }
                 else
-                    entriesDictionary[entry].ChunkSizes = new int[] { entriesDictionary[entry].UncompressedSize}; //To optimize
+                    entriesDictionary[entry].compressedChunkSizes = new int[] { entriesDictionary[entry].UncompressedSize}; //To optimize
             }
         }
 
@@ -95,7 +96,7 @@ namespace HPIZ
                 reader.BaseStream.Position = EntryListOffset + (i * 9);
 
                 int nameOffset = reader.ReadInt32();
-                int dataOffset = reader.ReadInt32(); //Unused
+                int dataOffset = reader.ReadInt32(); //Unused?
                 bool IsDirectory = reader.ReadBoolean();
                 reader.BaseStream.Position = nameOffset;
                 var fullPath = Path.Combine(parentPath, ReadStringCP437NullTerminated(reader));
@@ -104,32 +105,16 @@ namespace HPIZ
                     GetEntries(reader.ReadInt32(), reader.ReadInt32(), reader, fullPath);
                 else
                 {
-                    FileEntry fd = new FileEntry(reader);
+                    FileEntry fd = new FileEntry(reader , this);
                     entriesDictionary.Add(fullPath, fd);
                 }
             }
         }
 
-        internal static int GetDirectorySize(DirectoryTree tree)
-        {
-            int totalSize = 8;
-
-            foreach (var node in tree)
-            {
-                totalSize += 9;
-                totalSize += node.Key.Length + 1;
-                if (node.Children.Count != 0)
-                    totalSize += GetDirectorySize(node.Children);
-                else
-                    totalSize += 9;
-            }
-            return totalSize;
-        }
-
-        internal static void SetEntries(DirectoryTree tree, BinaryWriter bw, Queue<FileEntry> sequence, int directorySize)
+        internal static void SetEntries(DirectoryTree tree, BinaryWriter bw, IEnumerator<FileEntry> sequence)
         {
             bw.Write(tree.Count); //Root Entries number in directory
-
+           
             bw.Write((int)bw.BaseStream.Position + 4); //Entries Offset point to next
 
             for (int i = 0; i < tree.Count; ++i)
@@ -138,34 +123,34 @@ namespace HPIZ
                 if (i == 0)
                     posString = (int)bw.BaseStream.Position + (tree.Count - i) * 9;
                 else
-                    posString = (int)bw.BaseStream.Length;
+                    posString = (int)bw.BaseStream.Length; 
                 bw.Write(posString); //NameOffset;      /* points to the file name */
                 int posNext = posString + tree[i].Key.Length + 1;
                 bw.Write(posNext); //DirDataOffset;   /* points to directory data */
                 bool isDir = tree[i].Children.Count != 0;
-                bw.Write(isDir);
+                bw.Write(isDir); 
 
                 int previousPos = (int)bw.BaseStream.Position;
                 bw.BaseStream.Position = posString;
                 WriteStringCP437NullTerminated(bw, tree[i].Key);
                 if (isDir)
-                    SetEntries(tree[i].Children, bw, sequence, directorySize);
+                    SetEntries(tree[i].Children, bw, sequence);
                 else
                 {
-                    FileEntry fd = sequence.Dequeue();
-                    bw.Write(fd.OffsetOfCompressedData + directorySize); //OffsetOfData
-                    bw.Write(fd.UncompressedSize); //UncompressedSize 
-                    bw.Write((byte)fd.FlagCompression); //FlagCompression 
+                    sequence.MoveNext();
+                    bw.Write(sequence.Current.OffsetOfCompressedData); //OffsetOfData
+                    bw.Write(sequence.Current.UncompressedSize); //UncompressedSize 
+                    bw.Write((byte)sequence.Current.FlagCompression); //FlagCompression 
+                    
                 }
                 bw.BaseStream.Position = previousPos;
             }
         }
 
-      
-
 
         private static string ReadStringCP437NullTerminated(BinaryReader reader)
         {
+
             Encoding codePage437 = Encoding.GetEncoding(437);
             var bytes = new Queue<byte>();
             byte b = reader.ReadByte();
@@ -176,18 +161,13 @@ namespace HPIZ
             }
             var characters = codePage437.GetChars(bytes.ToArray());
 
-            char[] invalids = { '\"', '<', '>', '|', '\0', ':', '*', '?', '\\', '/' ,
-                (Char)1, (Char)2, (Char)3, (Char)4, (Char)5, (Char)6, (Char)7, (Char)8,
-                (Char)9, (Char)10, (Char)11, (Char)12, (Char)13,(Char)14,(Char)15, (Char)16,
-                (Char)17, (Char)18, (Char)19, (Char)20, (Char)21,(Char)22, (Char)23, (Char)24,
-                (Char)25, (Char)26, (Char)27, (Char)28, (Char)29, (Char)30, (Char)31 };
+            char[] invalids = { '\"', '<', '>', '|', '\0', ':', '*', '?', '\\', '/' };
  
             for (int i = 0; i < characters.Length; i++)
             {
-                if (invalids.Contains((characters[i])))
-                        characters[i] = '_'; //Replace invalid char with underscore
+                if (char.IsControl((characters[i])) || invalids.Contains((characters[i])))
+                        characters[i] = '_'; //Replace control or invalid char with underscore
             }
-
             return new string(characters);
         }
 
@@ -228,14 +208,14 @@ namespace HPIZ
             if(file.FlagCompression != CompressionMethod.LZ77 && file.FlagCompression != CompressionMethod.ZLib)
                 throw new Exception("Unknown compression method in file entry");
 
-            var chunkCount = file.ChunkSizes.Length;
+            var chunkCount = file.compressedChunkSizes.Length;
             var readPositions = new int[chunkCount];
             for (int i = 1; i < chunkCount; i++)
-                    readPositions[i] = readPositions[i - 1] + file.ChunkSizes[i - 1];
+                    readPositions[i] = readPositions[i - 1] + file.compressedChunkSizes[i - 1];
             
             int strReadPositions = file.OffsetOfCompressedData + (chunkCount * 4);
             reader.BaseStream.Position = strReadPositions;
-            var buffer = reader.ReadBytes(file.ChunkSizes.Sum());
+            var chunkBuffer = reader.ReadBytes(file.compressedChunkSizes.Sum());
 
             var outBytes = new byte[file.UncompressedSize];
 
@@ -243,9 +223,9 @@ namespace HPIZ
             Parallel.For(0, chunkCount, i =>
             {
                 if (obfuscationKey != 0)
-                    Clarify(buffer, readPositions[i] + strReadPositions, readPositions[i], file.ChunkSizes[i]);
+                    Clarify(chunkBuffer, readPositions[i] + strReadPositions, readPositions[i], file.compressedChunkSizes[i]);
 
-                var decompressedChunk = Chunk.Decompress(new MemoryStream(buffer, readPositions[i], file.ChunkSizes[i]));
+                var decompressedChunk = Chunk.Decompress(new MemoryStream(chunkBuffer, readPositions[i], file.compressedChunkSizes[i]));
 
                 Buffer.BlockCopy(decompressedChunk, 0, outBytes, i * Chunk.MaxSize, decompressedChunk.Length);
             }); // Parallel.For

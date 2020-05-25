@@ -9,14 +9,9 @@ namespace HPIZ
     {
         private const int Header = 0x48535153; //SQSH (SQUASH)
         private const byte DefaultVersion = 2; //Always 2?
-        public const int MinSize = 19;
-        public const int MaxSize = 65536;
+        public const int OverheadSize = 19; //Chunk structure minimum size in bytes
+        public const int MaxSize = 65536; //Maximum chunk size in bytes
         private const byte NoObfuscation = 0;
-
-        public static int ObtainDecompressedSize(byte[] chunk)
-        {
-            return BitConverter.ToInt32(chunk, 11);
-        }
 
         internal static byte[] Compress(byte[] bytesToCompress, CompressionFlavor flavor)
         {
@@ -31,7 +26,7 @@ namespace HPIZ
 
             writer.Write(Chunk.Header);
             writer.Write(Chunk.DefaultVersion);
-            writer.Write((byte)CompressionMethod.ZLib);
+            writer.Write((byte) CompressionMethod.ZLib);
             writer.Write(NoObfuscation);
 
             using (MemoryStream compressedStream = new MemoryStream(bytesToCompress.Length))
@@ -42,17 +37,23 @@ namespace HPIZ
                 switch (flavor)
                 {
                     case CompressionFlavor.ZLibDeflate:
-                        using (DeflateStream deflateStream = new DeflateStream(compressedStream, CompressionMode.Compress, true))
+                        using (DeflateStream deflateStream = new DeflateStream(compressedStream, CompressionLevel.Optimal, true))
                             deflateStream.Write(bytesToCompress, 0, bytesToCompress.Length);
                         break;
+
                     case CompressionFlavor.i5ZopfliDeflate:
                     case CompressionFlavor.i10ZopfliDeflate:
                     case CompressionFlavor.i15ZopfliDeflate:
+
+                        if(bytesToCompress.Length < Strategy.ZopfliBreakEven) //Skip Zopfli if file is small
+                            goto case CompressionFlavor.ZLibDeflate;
+
                         ZopfliDeflater zstream = new ZopfliDeflater(compressedStream);
                         zstream.NumberOfIterations = (int)flavor;
                         zstream.MasterBlockSize = 0;
                         zstream.Deflate(bytesToCompress, true);
                         break;
+
                     default:
                         throw new InvalidOperationException("Unknow compression flavor");
                 }

@@ -2,6 +2,7 @@
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Drawing;
+using System.Drawing.Text;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
@@ -13,9 +14,8 @@ namespace HPIZ
     {
 
         public static HpiArchive Open(string archiveFileName)
-        { 
-            using (FileStream fs = new FileStream(archiveFileName, FileMode.Open, FileAccess.Read, FileShare.Read))
-              return new HpiArchive(fs);
+        {
+            return new HpiArchive(new FileStream(archiveFileName, FileMode.Open, FileAccess.Read, FileShare.Read));
         }
 
         public static HpiArchive Create(string archiveFileName)
@@ -23,11 +23,11 @@ namespace HPIZ
             throw new System.NotImplementedException();
         }
 
-        public static void CreateFromDirectory(string sourceDirectoryFullName, string destinationArchiveFileName, CompressionFlavor flavor)
+        public static void CreateFromDirectory(string sourceDirectoryFullName, string destinationArchiveFileName, CompressionFlavor flavor, IProgress<string> progress)
         {
             destinationArchiveFileName = Path.GetFullPath(destinationArchiveFileName);
             var fileList = GetDirectoryFileList(sourceDirectoryFullName);
-            CreateFromFileList(fileList, sourceDirectoryFullName, destinationArchiveFileName, null, flavor);
+            CreateFromFileList(fileList.ToArray(), sourceDirectoryFullName, destinationArchiveFileName, progress, flavor);
         }
 
         public static SortedSet<string> GetDirectoryFileList(string sourceDirectoryFullName)
@@ -46,114 +46,169 @@ namespace HPIZ
             return fileList;
         }
 
-        public static void CreateFromFileList(SortedSet<string> fileList, string sourceDirectoryFullName, string destinationArchiveFileName, IProgress<string> progress, CompressionFlavor flavor)
+        private static FileEntry Compress(byte[] uncompressedBytes, CompressionFlavor flavor, string fileName, IProgress<string> progress)
         {
-            int totalFiles = fileList.Count;
-            var fileNameArray = fileList.ToArray();
-            var entrys = new FileEntry[totalFiles];
-            var chunkBuffer = new byte[totalFiles][][];
+            if (flavor != CompressionFlavor.StoreUncompressed && uncompressedBytes.Length > Strategy.DeflateBreakEven) //Skip compression of small files
+            {
+                var entry = new FileEntry(uncompressedBytes.Length, CompressionMethod.ZLib);
+                int chunkCount = entry.compressedChunkSizes.Length;
+                entry.ChunkBytes = new byte[chunkCount][];
+
+                // Parallelize chunk compression
+                Parallel.For(0, chunkCount, j =>
+                {
+                    int size = Chunk.MaxSize;
+                    if (j + 1 == chunkCount && uncompressedBytes.Length != Chunk.MaxSize) size = uncompressedBytes.Length % Chunk.MaxSize; //Last loop
+
+                    using (var ms = new MemoryStream(uncompressedBytes, j * Chunk.MaxSize, size))
+                    {
+                        entry.ChunkBytes[j] = Chunk.Compress(ms.ToArray(), flavor);
+                    }
+
+                    entry.compressedChunkSizes[j] = entry.ChunkBytes[j].Length;
+
+                    if (progress != null)
+                        progress.Report(fileName + ":Chunk#" + j.ToString());
+
+                }); // Parallel.For                    
+
+                return entry;
+            }
+            else
+            {
+                var entry = new FileEntry(uncompressedBytes.Length, CompressionMethod.None);
+                entry.ChunkBytes = new byte[1][];
+                entry.ChunkBytes[0] = uncompressedBytes;
+                if (progress != null)
+                    progress.Report(fileName);
+                return entry;
+            }
+        }
 
 
-            for (int i = 0; i < totalFiles; i++)
+        public static void CreateFromFileList(string[] fileListShortName, string sourceDirectoryPath, string destinationArchiveFileName, IProgress<string> progress, CompressionFlavor flavor)
+        {
+            var files = new SortedDictionary<string, FileEntry>();
+
+            for (int i = 0; i < fileListShortName.Length; i++)
             {
 
-                string fullName = Path.Combine(sourceDirectoryFullName, fileNameArray[i]);
-                var fileSize = (int)new FileInfo(fullName).Length;
-                if (fileSize > Int32.MaxValue)
-                    throw new Exception("File is too large: " + fileNameArray[i] + "Maximum allowed size is 2GB (2 147 483 647 bytes).");
+                string fullName = Path.Combine(sourceDirectoryPath, fileListShortName[i]);
+                var file = new FileInfo(fullName);
+                if (file.Length > Int32.MaxValue)
+                    throw new Exception("File is too large: " + fileListShortName[i] + "Maximum allowed size is 2GB (2 147 483 647 bytes).");
                 byte[] buffer = File.ReadAllBytes(fullName);
 
-                if (flavor != CompressionFlavor.StoreUncompressed && fileSize > 128) //Skip compression of small files
-                {
-                    int chunkCount = (buffer.Length / Chunk.MaxSize) + (buffer.Length % Chunk.MaxSize == 0 ? 0 : 1);
-                    chunkBuffer[i] = new byte[chunkCount][];
-                    var chunkSizes = new int[chunkCount];
+                files.Add(fileListShortName[i], Compress(buffer, flavor, fullName, progress));
 
-                    // Parallelize chunk compression
-                    Parallel.For(0, chunkCount, j =>
+            }
+
+            WriteToFile(destinationArchiveFileName, files);
+
+        }
+
+        public static void DoExtraction(PathCollection archivesFiles, string destinationPath, IProgress<string> progress)
+        {
+            foreach (var archiveFullPath in archivesFiles.Keys)
+            {
+                using (var archive = new HpiArchive(File.OpenRead(archiveFullPath)))
+                {
+                    //int progressLimiter = (fileList.Count - 1) / 100 + 1; //Reduce progress calls
+
+                    foreach (var shortFileName in archivesFiles[archiveFullPath])
                     {
-                        int size = Chunk.MaxSize;
-                        if (j + 1 == chunkCount && buffer.Length != Chunk.MaxSize) size = buffer.Length % Chunk.MaxSize; //Last loop
+                        string fullName = destinationPath + "\\" + shortFileName;
+                        Directory.CreateDirectory(Path.GetDirectoryName(fullName));
+                        var entry = archive.Entries[shortFileName];
+                        File.WriteAllBytes(fullName, archive.Extract(entry));
 
+                        //Report progress
+                        if (progress != null) //&& i % progressLimiter == 0)
+                            progress.Report(shortFileName);
+                    }
 
-                        chunkBuffer[i][j] = Chunk.Compress(new MemoryStream(buffer, j * Chunk.MaxSize, size).ToArray(), flavor);
-
-                        chunkSizes[j] = chunkBuffer[i][j].Length;
-
-                        if (progress != null)
-                            progress.Report(fileNameArray[i] + ":Chunk#" + j.ToString());
-
-                    }); // Parallel.For                    
-
-                    entrys[i] = new FileEntry(fileSize, CompressionMethod.ZLib, chunkSizes);
                 }
-                else
+            }
+        }
+
+        public static void Merge(PathCollection archivesFiles, string destinationArchiveFileName, CompressionFlavor flavor, IProgress<string> progress)
+        {
+            var files = new SortedDictionary<string, FileEntry>();
+            foreach (var archiveFullPath in archivesFiles.Keys)
+            {
+                using (var archive = new HpiArchive(File.OpenRead(archiveFullPath)))
                 {
-                    entrys[i] = new FileEntry(fileSize, CompressionMethod.None, null);
-                    chunkBuffer[i] = new byte[1][];
-                    chunkBuffer[i][0] = buffer;
-                    if (progress != null)
-                        progress.Report(fileNameArray[i]);
+
+                    foreach (var shortFileName in archivesFiles[archiveFullPath])
+                    {
+
+                        var entry = archive.Entries[shortFileName];
+                        var buffer = archive.Extract(entry);
+
+                        if (files.ContainsKey(shortFileName))
+                            files[shortFileName] = Compress(buffer, flavor, shortFileName, progress);
+                        else
+                        files.Add(shortFileName, Compress(buffer, flavor, shortFileName, progress));
+                    }
+
                 }
             }
 
-        var serialWriter = new BinaryWriter(new MemoryStream());
-        var sequence = new Queue<FileEntry>(totalFiles);
-        for (int i = 0; i < totalFiles; i++)
-			{
-                entrys[i].OffsetOfCompressedData = (int) serialWriter.BaseStream.Position;
-                sequence.Enqueue(entrys[i]);
+            WriteToFile(destinationArchiveFileName, files);
+        }
 
-                if(entrys[i].FlagCompression != CompressionMethod.None)
-                foreach (var size in entrys[i].ChunkSizes)
-                    serialWriter.Write(size);
-
-                foreach (var chunk in chunkBuffer[i])
-                    serialWriter.Write(chunk);
-            }
-
-            
-        var tree = new DirectoryTree();
-            foreach (var item in fileNameArray)
-                tree.AddEntry(item);
-
-  
-        BinaryWriter bw = new BinaryWriter(new MemoryStream());
-
-        bw.Write(HPIZ.HpiArchive.HeaderMarker);
-        bw.Write(HpiArchive.DefaultVersion);
-
-            int directorySize = HpiArchive.GetDirectorySize(tree) + 20;
-        bw.Write(directorySize);
-
-            bw.Write(HpiArchive.NoObfuscationKey);
-
-            int directoryStart = 20;
-        bw.Write(directoryStart); //Directory Start at Pos20, always start it next
-
-            HpiArchive.SetEntries(tree, bw, sequence, directorySize);
-
-            serialWriter.BaseStream.Position = 0;
-            bw.BaseStream.Position = bw.BaseStream.Length;
-            serialWriter.BaseStream.CopyTo(bw.BaseStream);
-
-            bw.Write("Copyright " + DateTime.Now.Year.ToString() + " Cavedog Entertainment"); //Endfile mandatory string
-
-
+        private static void WriteToFile(string destinationArchiveFileName, SortedDictionary<string, FileEntry> entries)
+        {
+            var tree = new DirectoryTree(); //Provisory Tre
+            foreach (var fileName in entries.Keys)
+                tree.AddEntry(fileName);
+            int directorySize = tree.CalculateSize() + 20;
 
             using (var fileStream = File.Create(destinationArchiveFileName))
             {
-                bw.BaseStream.Position = 0;
-                bw.BaseStream.CopyTo(fileStream);
+                BinaryWriter chunckWriter = new BinaryWriter(fileStream);
+
+                chunckWriter.BaseStream.Position = directorySize;
+
+                foreach (var file in entries)
+                {
+                    file.Value.OffsetOfCompressedData = (int)chunckWriter.BaseStream.Position;
+
+                    if (file.Value.FlagCompression != CompressionMethod.None)
+                        foreach (var size in file.Value.compressedChunkSizes)
+                            chunckWriter.Write(size);
+
+                    foreach (var chunk in file.Value.ChunkBytes)
+                        chunckWriter.Write(chunk);
+                }
+                chunckWriter.Write("Copyright " + DateTime.Now.Year.ToString() + " Cavedog Entertainment"); //Endfile mandatory string
+
+                BinaryWriter headerWriter = new BinaryWriter(new MemoryStream());
+
+                headerWriter.BaseStream.Position = 0;
+
+                headerWriter.Write(HpiArchive.HeaderMarker);
+                headerWriter.Write(HpiArchive.DefaultVersion);
+
+                tree = new DirectoryTree(); //Definitive Tree
+                foreach (var item in entries.Keys)
+                    tree.AddEntry(item);
+                directorySize = tree.CalculateSize() + 20; //TO IMPROVE, BAD CODE
+                headerWriter.Write(directorySize);
+
+                headerWriter.Write(HpiArchive.NoObfuscationKey);
+
+                int directoryStart = 20;
+                headerWriter.Write(directoryStart); //Directory Start at Pos20
+
+                IEnumerator<FileEntry> sequence = entries.Values.ToList().GetEnumerator();
+                HpiArchive.SetEntries(tree, headerWriter, sequence);
+
+                fileStream.Position = 0;
+                headerWriter.BaseStream.Position = 0;
+                headerWriter.BaseStream.CopyTo(fileStream);
             }
 
         }
-
-        public static void ExtractToDirectory(string sourceArchiveFileName, string destinationDirectoryName)
-        {
-            throw new System.NotImplementedException();
-        }
-
-
     }
 }
