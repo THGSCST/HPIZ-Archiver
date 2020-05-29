@@ -1,8 +1,5 @@
 ﻿using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.Drawing;
-using System.Drawing.Text;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
@@ -21,7 +18,7 @@ namespace HPIZ
         public static HpiArchive Create(string archiveFileName)
         {
             throw new System.NotImplementedException();
-        }
+        } 
 
         public static void CreateFromDirectory(string sourceDirectoryFullName, string destinationArchiveFileName, CompressionFlavor flavor, IProgress<string> progress)
         {
@@ -35,56 +32,13 @@ namespace HPIZ
             var fileList = new SortedSet<string>();
             sourceDirectoryFullName = Path.GetFullPath(sourceDirectoryFullName);
             DirectoryInfo directoryInfo = new DirectoryInfo(sourceDirectoryFullName);
-            long totalSize = 0;
-            foreach (FileInfo fsi in directoryInfo.EnumerateFiles("*", SearchOption.AllDirectories))
+            var files = directoryInfo.EnumerateFiles("*", SearchOption.AllDirectories);
+            foreach (var file in files)
             {
-
-                totalSize += fsi.Length;
-                if (totalSize > Int32.MaxValue) throw new Exception("Directory is too large. Maximum total size is 2GB (2 147 483 647 bytes).");
-                fileList.Add(fsi.FullName.Substring(sourceDirectoryFullName.Length + 1));
+                fileList.Add(file.FullName.Substring(sourceDirectoryFullName.Length + 1));
             }
             return fileList;
         }
-
-        private static FileEntry Compress(byte[] uncompressedBytes, CompressionFlavor flavor, string fileName, IProgress<string> progress)
-        {
-            if (flavor != CompressionFlavor.StoreUncompressed && uncompressedBytes.Length > Strategy.DeflateBreakEven) //Skip compression of small files
-            {
-                var entry = new FileEntry(uncompressedBytes.Length, CompressionMethod.ZLib);
-                int chunkCount = entry.compressedChunkSizes.Length;
-                entry.ChunkBytes = new byte[chunkCount][];
-
-                // Parallelize chunk compression
-                Parallel.For(0, chunkCount, j =>
-                {
-                    int size = Chunk.MaxSize;
-                    if (j + 1 == chunkCount && uncompressedBytes.Length != Chunk.MaxSize) size = uncompressedBytes.Length % Chunk.MaxSize; //Last loop
-
-                    using (var ms = new MemoryStream(uncompressedBytes, j * Chunk.MaxSize, size))
-                    {
-                        entry.ChunkBytes[j] = Chunk.Compress(ms.ToArray(), flavor);
-                    }
-
-                    entry.compressedChunkSizes[j] = entry.ChunkBytes[j].Length;
-
-                    if (progress != null)
-                        progress.Report(fileName + ":Chunk#" + j.ToString());
-
-                }); // Parallel.For                    
-
-                return entry;
-            }
-            else
-            {
-                var entry = new FileEntry(uncompressedBytes.Length, CompressionMethod.None);
-                entry.ChunkBytes = new byte[1][];
-                entry.ChunkBytes[0] = uncompressedBytes;
-                if (progress != null)
-                    progress.Report(fileName);
-                return entry;
-            }
-        }
-
 
         public static void CreateFromFileList(string[] fileListShortName, string sourceDirectoryPath, string destinationArchiveFileName, IProgress<string> progress, CompressionFlavor flavor)
         {
@@ -99,7 +53,7 @@ namespace HPIZ
                     throw new Exception("File is too large: " + fileListShortName[i] + "Maximum allowed size is 2GB (2 147 483 647 bytes).");
                 byte[] buffer = File.ReadAllBytes(fullName);
 
-                files.Add(fileListShortName[i], Compress(buffer, flavor, fullName, progress));
+                files.Add(fileListShortName[i], new FileEntry(buffer, flavor, fullName, progress));
 
             }
 
@@ -135,10 +89,7 @@ namespace HPIZ
         {
             var files = new SortedDictionary<string, FileEntry>();
             foreach (var archiveFullPath in archivesFiles.Keys)
-            {
                 using (var archive = new HpiArchive(File.OpenRead(archiveFullPath)))
-                {
-
                     foreach (var shortFileName in archivesFiles[archiveFullPath])
                     {
 
@@ -146,20 +97,16 @@ namespace HPIZ
                         var buffer = archive.Extract(entry);
 
                         if (files.ContainsKey(shortFileName))
-                            files[shortFileName] = Compress(buffer, flavor, shortFileName, progress);
+                            files[shortFileName] = new FileEntry(buffer, flavor, shortFileName, progress);
                         else
-                        files.Add(shortFileName, Compress(buffer, flavor, shortFileName, progress));
+                        files.Add(shortFileName, new FileEntry(buffer, flavor, shortFileName, progress));
                     }
-
-                }
-            }
-
             WriteToFile(destinationArchiveFileName, files);
         }
 
         private static void WriteToFile(string destinationArchiveFileName, SortedDictionary<string, FileEntry> entries)
         {
-            var tree = new DirectoryTree(); //Provisory Tre
+            var tree = new DirectoryTree(); //Provisory Tree
             foreach (var fileName in entries.Keys)
                 tree.AddEntry(fileName);
             int directorySize = tree.CalculateSize() + 20;
@@ -172,6 +119,9 @@ namespace HPIZ
 
                 foreach (var file in entries)
                 {
+                    if(chunckWriter.BaseStream.Position > Int32.MaxValue)
+                        throw new Exception("Maximum allowed size is 2GB (2 147 483 647 bytes).");
+
                     file.Value.OffsetOfCompressedData = (int)chunckWriter.BaseStream.Position;
 
                     if (file.Value.FlagCompression != CompressionMethod.None)
@@ -207,6 +157,10 @@ namespace HPIZ
                 fileStream.Position = 0;
                 headerWriter.BaseStream.Position = 0;
                 headerWriter.BaseStream.CopyTo(fileStream);
+
+                if(fileStream.Length > Int32.MaxValue)
+                    MessageBox.Show("The HPI file was created, but its size exceeds 2GB (2 147 483 647 bytes). A fatal error may occur when loading the game.", "Oversize Warning", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+
             }
 
         }

@@ -14,8 +14,9 @@ namespace HPIZArchiver
 {
     public partial class MainForm : Form
     {
+        SortedSet<string> uniqueFiles = new SortedSet<string>();
         SortedSet<string> uniqueItens = new SortedSet<string>();
-        SortedSet<string> duplicatedItens = new SortedSet<string>();
+        List<string> duplicatedItens = new List<string>();
         public MainForm()
         {
             InitializeComponent();
@@ -29,32 +30,34 @@ namespace HPIZArchiver
 
         private void PopulateList(List<ListViewItem> collection)
         {
-            bool addToList = true;
-            if (collection != null)
-                for (int i = 0; i < listViewFiles.Groups.Count; i++)
-                    if (listViewFiles.Groups[i].Name == collection.First().Group.Name)
-                    { addToList = false; break; }
-
-            if (addToList)
+            string newGroupName = string.Empty;
+            listViewFiles.BeginUpdate();
+            foreach (var item in collection)
             {
-                listViewFiles.BeginUpdate();
-                listViewFiles.Groups.Add(collection.First().Group);
-                foreach (var item in collection)
+                if(uniqueFiles.Add(item.Group.Name))
+                {
+                    newGroupName = item.Group.Name;
+                    listViewFiles.Groups.Add(item.Group);
+                }
+
+                if(item.Group.Name == newGroupName)
                 {
                     if (uniqueItens.Add(item.SubItems[1].Text))
-                        item.Checked = true;
+                            item.Checked = true;
                     else
-                    {                        
-                        rulesStripButton.Enabled = true;
-                        duplicatedItens.Add(item.SubItems[1].Text);
-                     }
+                        {
+                            rulesStripButton.Enabled = true;
+                            duplicatedItens.Add(item.SubItems[1].Text);
+                        }
+
+                    listViewFiles.Items.Add(item);
                 }
-                listViewFiles.Items.AddRange(collection.ToArray());
+            }
                 listViewFiles.EndUpdate();
                 listViewFiles.Enabled = true;
-            }
         }
-        private void CalculateTotalListSizes()
+        
+        internal void CalculateTotalListSizes()
         {
             long totalSize = 0;
             long totalCompressedSize = 0;
@@ -75,16 +78,16 @@ namespace HPIZArchiver
                 firstStatusLabel.Text += " (uncompressed) inside " + listViewFiles.Groups.Count.ToString() + " opened directory(ies).";
 
             if (duplicatedItens.Count > 0)
-                secondStatusLabel.Text = "Duplicated files found: " + duplicatedItens.Count.ToString();
+                secondStatusLabel.Text = "Duplicated names found: " + duplicatedItens.Count.ToString();
         }
 
-        private async void hPIFileToExtractToolStripMenuItem_Click(object sender, EventArgs e)
+        internal async void hPIFileToExtractToolStripMenuItem_Click(object sender, EventArgs e)
         {
             if (dialogOpenHpi.ShowDialog() == DialogResult.OK)
             {
                 SimpleLoading("Loading file list from selected HPI file(s)...");
 
-                string[] order = { ".GP3", ".CCX", ".UFO", ".HPI" }; //File load priority
+                string[] order = { ".GP3", ".CCX", ".UFO", ".HPI" }; //File load priority order
                 var orderedList = dialogOpenHpi.FileNames.OrderBy(x => {
                     var index = Array.IndexOf(order, Path.GetExtension(x).ToUpper());
                     return index < 0 ? int.MaxValue : index; }).ToList();
@@ -124,20 +127,20 @@ namespace HPIZArchiver
 
         public List<ListViewItem> GetListViewGroupItens(string fullPath)
         {
+
             var listColection = new List<ListViewItem>();
             //Check if path is a directory or file
             FileAttributes fileAtt = File.GetAttributes(fullPath);
             if (fileAtt.HasFlag(FileAttributes.Directory)) //Directory
             {
                 var fileList = Directory.GetFiles(fullPath, "*", SearchOption.AllDirectories);
-                long totalSize = 0;
                 var group = new ListViewGroup(fullPath, "Dir: " + fullPath);
                 foreach (var file in fileList)
                 {
                     var finfo = new FileInfo(file);
                     if (finfo.Length > Int32.MaxValue)
                         throw new Exception(finfo.Name + " is too large. File maximum size is 2GB (2 147 483 647 bytes).");
-                    totalSize += finfo.Length;
+
                     ListViewItem lvItem = new ListViewItem(group);
                     lvItem.Tag = fullPath;
                     var subItems = new ListViewItem.ListViewSubItem[3];
@@ -417,7 +420,9 @@ namespace HPIZArchiver
             listViewFiles.Items.Clear();
             listViewFiles.Groups.Clear();
             listViewFiles.Enabled = true;
+            uniqueFiles.Clear();
             uniqueItens.Clear();
+            duplicatedItens.Clear();
             ChangeArchiverMode(false, false);
             firstStatusLabel.Text = "No files or directories opened";
             secondStatusLabel.Text = string.Empty;

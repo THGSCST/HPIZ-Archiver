@@ -85,6 +85,9 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="CollapsibleListView.cs">
+      <SubType>Component</SubType>
+    </Compile>
     <Compile Include="ListViewItemComparer.cs" />
     <Compile Include="MainForm.cs">
       <SubType>Form</SubType>

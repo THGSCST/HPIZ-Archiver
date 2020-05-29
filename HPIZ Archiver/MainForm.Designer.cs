@@ -50,7 +50,7 @@
             this.progressBar = new System.Windows.Forms.ToolStripProgressBar();
             this.firstStatusLabel = new System.Windows.Forms.ToolStripStatusLabel();
             this.secondStatusLabel = new System.Windows.Forms.ToolStripStatusLabel();
-            this.listViewFiles = new System.Windows.Forms.ListView();
+            this.listViewFiles = new CollapsibleListView();
             this.columnChecked = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
             this.columnFullName = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
             this.columnExt = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
