@@ -57,6 +57,9 @@ namespace HPIZ
                     default:
                         throw new InvalidOperationException("Unknow compression flavor");
                 }
+
+                WriteAdler32(bytesToCompress, compressedStream);
+
                 var compressedDataArray = compressedStream.ToArray(); //Change to stream
                 int checksum = ComputeChecksum(compressedDataArray); //Change to stream
 
@@ -112,5 +115,23 @@ namespace HPIZ
             return sum;
         }
 
+        private static void WriteAdler32(byte[] data, Stream output)
+        {
+            var s1 = 1;
+            var s2 = 0;
+            foreach (var b in data)
+            {
+                s1 = (s1 + b) % 65521;
+                s2 = (s2 + s1) % 65521;
+            }
+            var sum = (s2 * 65536) + s1;
+
+            var outputBytes = BitConverter.GetBytes(sum);
+            if (BitConverter.IsLittleEndian)
+            {
+                Array.Reverse(outputBytes);
+            }
+            output.Write(outputBytes, 0, outputBytes.Length);
+        }
     }
 }
