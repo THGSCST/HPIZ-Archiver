@@ -117,14 +117,27 @@ namespace HPIZ
 
         private static void WriteAdler32(byte[] data, Stream output)
         {
-            var s1 = 1;
-            var s2 = 0;
-            foreach (var b in data)
+            ulong s1 = 1;
+            ulong s2 = 0;
+            var remaining = data.Length;
+            int offset = 0;
+            while (remaining > 0)
             {
-                s1 = (s1 + b) % 65521;
-                s2 = (s2 + s1) % 65521;
+                int maxBeforeOverflow = 380368695;
+                if (maxBeforeOverflow > remaining)
+                    maxBeforeOverflow = remaining;
+                
+                remaining -= maxBeforeOverflow;
+                while (--maxBeforeOverflow >= 0)
+                {
+                    s1 += data[offset++];
+                    s2 += s1;
+                }
+                s1 %= 65521;
+                s2 %= 65521;
             }
-            var sum = (s2 * 65536) + s1;
+
+            uint sum = (uint)((s2 << 16) | s1);
 
             var outputBytes = BitConverter.GetBytes(sum);
             if (BitConverter.IsLittleEndian)
