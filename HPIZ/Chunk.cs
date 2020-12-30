@@ -131,31 +131,20 @@ namespace HPIZ
         {
             ulong s1 = 1;
             ulong s2 = 0;
-            var remaining = data.Length;
-            int offset = 0;
-            while (remaining > 0)
+            for (int i = 0; i < data.Length; i++) //Maximum SUM operations without MOD is 380368695, big enough for the chunk size
             {
-                int maxBeforeOverflow = 380368695;
-                if (maxBeforeOverflow > remaining)
-                    maxBeforeOverflow = remaining;
-                
-                remaining -= maxBeforeOverflow;
-                while (--maxBeforeOverflow >= 0)
-                {
-                    s1 += data[offset++];
-                    s2 += s1;
-                }
-                s1 %= 65521;
-                s2 %= 65521;
+                s1 += data[i];
+                s2 += s1;
             }
+            s1 %= 65521;
+            s2 %= 65521;
 
             uint sum = (uint)((s2 << 16) | s1);
 
             var outputBytes = BitConverter.GetBytes(sum);
             if (BitConverter.IsLittleEndian)
-            {
                 Array.Reverse(outputBytes);
-            }
+
             output.Write(outputBytes, 0, outputBytes.Length);
         }
     }
