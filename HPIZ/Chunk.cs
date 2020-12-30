@@ -29,45 +29,45 @@ namespace HPIZ
             writer.Write((byte) CompressionMethod.ZLib);
             writer.Write(NoObfuscation);
 
-            using (MemoryStream compressedStream = new MemoryStream(bytesToCompress.Length))
+            writer.BaseStream.Position = OverheadSize;
+            writer.Write((byte) 0x78); //ZLib header first byte
+            writer.Write((byte) 0xDA); //ZLib header second byte
+
+            switch (flavor)
             {
-                compressedStream.WriteByte(0x78); //ZLib header first byte
-                compressedStream.WriteByte(0xDA); //ZLib header second byte
+                case CompressionFlavor.ZLibDeflate:
+                    using (DeflateStream deflateStream = new DeflateStream(output, CompressionLevel.Optimal, true))
+                        deflateStream.Write(bytesToCompress, 0, bytesToCompress.Length);
+                    break;
 
-                switch (flavor)
-                {
-                    case CompressionFlavor.ZLibDeflate:
-                        using (DeflateStream deflateStream = new DeflateStream(compressedStream, CompressionLevel.Optimal, true))
-                            deflateStream.Write(bytesToCompress, 0, bytesToCompress.Length);
-                        break;
+                case CompressionFlavor.i5ZopfliDeflate:
+                case CompressionFlavor.i10ZopfliDeflate:
+                case CompressionFlavor.i15ZopfliDeflate:
 
-                    case CompressionFlavor.i5ZopfliDeflate:
-                    case CompressionFlavor.i10ZopfliDeflate:
-                    case CompressionFlavor.i15ZopfliDeflate:
+                    if(bytesToCompress.Length < Strategy.ZopfliBreakEven) //Skip Zopfli if file is small
+                        goto case CompressionFlavor.ZLibDeflate;
 
-                        if(bytesToCompress.Length < Strategy.ZopfliBreakEven) //Skip Zopfli if file is small
-                            goto case CompressionFlavor.ZLibDeflate;
+                    ZopfliDeflater zstream = new ZopfliDeflater(output);
+                    zstream.NumberOfIterations = (int)flavor;
+                    zstream.MasterBlockSize = 0;
+                    zstream.Deflate(bytesToCompress, true);
+                    break;
 
-                        ZopfliDeflater zstream = new ZopfliDeflater(compressedStream);
-                        zstream.NumberOfIterations = (int)flavor;
-                        zstream.MasterBlockSize = 0;
-                        zstream.Deflate(bytesToCompress, true);
-                        break;
-
-                    default:
-                        throw new InvalidOperationException("Unknow compression flavor");
-                }
-
-                WriteAdler32(bytesToCompress, compressedStream);
-
-                var compressedDataArray = compressedStream.ToArray(); //Change to stream
-                int checksum = ComputeChecksum(compressedDataArray); //Change to stream
-
-                writer.Write(compressedDataArray.Length);
-                writer.Write(bytesToCompress.Length);
-                writer.Write(checksum);
-                writer.Write(compressedDataArray);
+                default:
+                    throw new InvalidOperationException("Unknow compression flavor");
             }
+
+            WriteAdler32(bytesToCompress, output);
+
+            output.Position = 7;
+            writer.Write((int) output.Length - OverheadSize);
+            writer.Write(bytesToCompress.Length);
+
+            output.Position = OverheadSize;
+            int checksum = ComputeChecksum(output);
+            output.Position = 15;
+            writer.Write(checksum);
+            
             return output.ToArray();
         }
 
@@ -112,6 +112,18 @@ namespace HPIZ
             int sum = 0;
             for (int i = 0; i < data.Length; ++i)
                 sum += data[i];
+            return sum;
+        }
+
+        private static int ComputeChecksum(Stream data)
+        {
+            int sum = 0;
+            int b = 0;
+            while (b != -1)
+            {
+                sum += b;
+                b = data.ReadByte();
+            }
             return sum;
         }
 
