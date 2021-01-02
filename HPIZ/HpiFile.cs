@@ -109,7 +109,7 @@ namespace HPIZ
             var tree = new DirectoryTree(); //Provisory Tree
             foreach (var fileName in entries.Keys)
                 tree.AddEntry(fileName);
-            int directorySize = tree.CalculateSize() + 20;
+            int directorySize = tree.CalculateSize() + HpiArchive.HeaderSize;
 
             using (var fileStream = File.Create(destinationArchiveFileName))
             {
@@ -129,9 +129,10 @@ namespace HPIZ
                             chunckWriter.Write(size);
 
                     foreach (var chunk in file.Value.ChunkBytes)
-                        chunckWriter.Write(chunk);
+                        chunk.WriteTo(chunckWriter.BaseStream);
                 }
-                chunckWriter.Write("Copyright " + DateTime.Now.Year.ToString() + " Cavedog Entertainment"); //Endfile mandatory string
+                string mandatoryEnding = "Copyright " + DateTime.Now.Year.ToString() + " Cavedog Entertainment";
+                chunckWriter.Write(System.Text.Encoding.GetEncoding(437).GetBytes(mandatoryEnding));
 
                 BinaryWriter headerWriter = new BinaryWriter(new MemoryStream());
 
@@ -143,13 +144,12 @@ namespace HPIZ
                 tree = new DirectoryTree(); //Definitive Tree
                 foreach (var item in entries.Keys)
                     tree.AddEntry(item);
-                directorySize = tree.CalculateSize() + 20; //TO IMPROVE, BAD CODE
+                directorySize = tree.CalculateSize() + HpiArchive.HeaderSize; //TO IMPROVE, BAD CODE
                 headerWriter.Write(directorySize);
 
                 headerWriter.Write(HpiArchive.NoObfuscationKey);
 
-                int directoryStart = 20;
-                headerWriter.Write(directoryStart); //Directory Start at Pos20
+                headerWriter.Write(HpiArchive.HeaderSize); //Directory Start at Pos20
 
                 IEnumerator<FileEntry> sequence = entries.Values.ToList().GetEnumerator();
                 HpiArchive.SetEntries(tree, headerWriter, sequence);

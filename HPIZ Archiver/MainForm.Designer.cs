@@ -50,7 +50,7 @@
             this.progressBar = new System.Windows.Forms.ToolStripProgressBar();
             this.firstStatusLabel = new System.Windows.Forms.ToolStripStatusLabel();
             this.secondStatusLabel = new System.Windows.Forms.ToolStripStatusLabel();
-            this.listViewFiles = new CollapsibleListView();
+            this.listViewFiles = new HPIZArchiver.CollapsibleListView();
             this.columnChecked = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
             this.columnFullName = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
             this.columnExt = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
@@ -235,7 +235,6 @@
             this.progressBar,
             this.firstStatusLabel,
             this.secondStatusLabel});
-            this.statusStrip.LayoutStyle = System.Windows.Forms.ToolStripLayoutStyle.HorizontalStackWithOverflow;
             this.statusStrip.Location = new System.Drawing.Point(0, 447);
             this.statusStrip.Name = "statusStrip";
             this.statusStrip.Padding = new System.Windows.Forms.Padding(1, 0, 13, 0);
@@ -259,8 +258,10 @@
             // secondStatusLabel
             // 
             this.secondStatusLabel.Name = "secondStatusLabel";
-            this.secondStatusLabel.Size = new System.Drawing.Size(13, 20);
+            this.secondStatusLabel.Size = new System.Drawing.Size(656, 20);
+            this.secondStatusLabel.Spring = true;
             this.secondStatusLabel.Text = " ";
+            this.secondStatusLabel.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
             // 
             // listViewFiles
             // 
@@ -410,7 +411,6 @@
         private System.Windows.Forms.ToolStripSeparator toolStripSeparator1;
         private System.Windows.Forms.StatusStrip statusStrip;
         private System.Windows.Forms.ToolStripStatusLabel firstStatusLabel;
-        private System.Windows.Forms.ListView listViewFiles;
         private System.Windows.Forms.ColumnHeader columnFullName;
         private System.Windows.Forms.ColumnHeader columnSize;
         private System.Windows.Forms.FolderBrowserDialog dialogOpenFolder;
@@ -442,6 +442,7 @@
         private System.Windows.Forms.ToolStripMenuItem closeAllToolStripMenuItem;
         private System.Windows.Forms.ToolStripMenuItem keepFirstToolStripMenuItem;
         private System.Windows.Forms.ToolStripMenuItem mergeRepackCheckedFilesToolStripMenuItem;
+        private CollapsibleListView listViewFiles;
     }
 }
 

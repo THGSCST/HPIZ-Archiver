@@ -13,7 +13,7 @@ namespace HPIZ
         public const int MaxSize = 65536; //Maximum chunk size in bytes
         private const byte NoObfuscation = 0;
 
-        internal static byte[] Compress(byte[] bytesToCompress, CompressionFlavor flavor)
+        internal static MemoryStream Compress(byte[] bytesToCompress, CompressionFlavor flavor)
         {
             if (bytesToCompress == null)
                 throw new InvalidDataException("Cannot compress null array");
@@ -68,7 +68,7 @@ namespace HPIZ
             output.Position = 15;
             writer.Write(checksum);
             
-            return output.ToArray();
+            return output;
         }
 
         internal static byte[] Decompress(MemoryStream bytesToDecompress)

@@ -11,7 +11,7 @@ namespace HPIZ
         public int UncompressedSize;
         public CompressionMethod FlagCompression;
         public int[] compressedChunkSizes;
-        public byte[][] ChunkBytes;
+        public MemoryStream[] ChunkBytes;
 
         public FileEntry(BinaryReader reader, HpiArchive parentArchive)
         {
@@ -26,43 +26,54 @@ namespace HPIZ
             UncompressedSize = uncompressedBytes.Length;
             if (flavor != CompressionFlavor.StoreUncompressed && uncompressedBytes.Length > Strategy.DeflateBreakEven) //Skip compression of small files
             {
-                compressedChunkSizes = new int[CalculateChunkQuantity()];
-                ChunkBytes = new byte[compressedChunkSizes.Length][];
-
-                // Parallelize chunk compression
-                System.Threading.Tasks.Parallel.For(0, compressedChunkSizes.Length, j =>
+                if (uncompressedBytes.Length > Chunk.MaxSize) //Split into chunks and compress
                 {
-                    int size = Chunk.MaxSize;
-                    if (j + 1 == compressedChunkSizes.Length && uncompressedBytes.Length != Chunk.MaxSize) size = uncompressedBytes.Length % Chunk.MaxSize; //Last loop
+                    compressedChunkSizes = new int[CalculateChunkQuantity()];
+                    ChunkBytes = new MemoryStream[compressedChunkSizes.Length];
 
-                    using (var ms = new MemoryStream(uncompressedBytes, j * Chunk.MaxSize, size))
+                    // Parallelize chunk compression start
+                    System.Threading.Tasks.Parallel.For(0, compressedChunkSizes.Length, j =>
                     {
-                        ChunkBytes[j] = Chunk.Compress(ms.ToArray(), flavor);
+                        int chunkSize = Chunk.MaxSize;
+                        if (j + 1 == compressedChunkSizes.Length && uncompressedBytes.Length != Chunk.MaxSize) chunkSize = uncompressedBytes.Length % Chunk.MaxSize; //Last loop
 
-                        if(Strategy.TryCompressKeepIfWorthwhile && compressedChunkSizes.Length == 1 && ChunkBytes[j].Length + 4 > ms.Length)
-                        {
-                            FlagCompression = CompressionMethod.None;
-                            ChunkBytes[0] = uncompressedBytes;
-                        }
-                        else
-                        {
-                            FlagCompression = CompressionMethod.ZLib;
-                            compressedChunkSizes[j] = ChunkBytes[j].Length;
-                        }
+                        var uncompressedChunk = new byte[chunkSize];
+                        Buffer.BlockCopy(uncompressedBytes, Chunk.MaxSize * j, uncompressedChunk, 0, chunkSize);
 
+                        ChunkBytes[j] = Chunk.Compress(uncompressedChunk, flavor);
+
+                        FlagCompression = CompressionMethod.ZLib;
+                        compressedChunkSizes[j] = (int) ChunkBytes[j].Length;
+
+                        if (progress != null)
+                            progress.Report(fileName + ":Chunk#" + j.ToString());
+                    }); // Parallel.For end 
+                }
+                else //Single chunk
+                {
+                    ChunkBytes = new MemoryStream[1];
+                    ChunkBytes[0] = Chunk.Compress(uncompressedBytes, flavor);
+
+                    if (Strategy.TryCompressKeepIfWorthwhile && ChunkBytes[0].Length + 4 > uncompressedBytes.Length)
+                    {
+                        FlagCompression = CompressionMethod.None;
+                        ChunkBytes[0] = new MemoryStream(uncompressedBytes);
+                    }
+                    else
+                    {
+                        FlagCompression = CompressionMethod.ZLib;
+                        compressedChunkSizes = new int[] { (int) ChunkBytes[0].Length };
                     }
 
                     if (progress != null)
-                        progress.Report(fileName + ":Chunk#" + j.ToString());
-
-                }); // Parallel.For                    
-
+                        progress.Report(fileName + ":Chunk#0");
+                }
             }
             else
             {
                 FlagCompression = CompressionMethod.None;
-                ChunkBytes = new byte[1][];
-                ChunkBytes[0] = uncompressedBytes;
+                ChunkBytes = new MemoryStream[1];
+                ChunkBytes[0] = new MemoryStream(uncompressedBytes);
                 if (progress != null)
                     progress.Report(fileName);
             }

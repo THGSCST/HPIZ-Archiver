@@ -13,7 +13,7 @@ namespace HPIZ
         internal const int HeaderMarker = 0x49504148; //HAPI Header
         internal const int DefaultVersion = 0x00010000;
         internal const int NoObfuscationKey = 0;
-        internal const int DefaultHeaderSize = 20;
+        internal const int HeaderSize = 20;
 
         internal readonly Stream archiveStream;
         private readonly int obfuscationKey;
@@ -150,7 +150,6 @@ namespace HPIZ
 
         private static string ReadStringCP437NullTerminated(BinaryReader reader)
         {
-
             Encoding codePage437 = Encoding.GetEncoding(437);
             var bytes = new Queue<byte>();
             byte b = reader.ReadByte();

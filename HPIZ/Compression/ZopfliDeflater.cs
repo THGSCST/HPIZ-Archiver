@@ -468,8 +468,8 @@ namespace CompressSharper.Zopfli
 
                 _writer.Write(new byte[]
                 {
-                    (byte)(count & 0xff), (byte) ((count >>8) & 0xff),
-                    (byte)(ncount &0xff), (byte)((ncount >>8 ) &0xff)
+                    (byte) count,  (byte) (count >>8),
+                    (byte) ncount, (byte) (ncount >>8)
                 });
 
                 _writer.Write(buffer, bufferStart, bufferEnd - bufferStart);
@@ -1964,19 +1964,20 @@ namespace CompressSharper.Zopfli
 
             private void SublenToCache(ushort[] sublen, int pos, int length)
             {
+                if (length < 3) return;
+
                 int j = 0;
                 uint bestlength = 0;
                 int cachePos = (CacheLength * 3) * pos;
                 int cachePos2 = cachePos;
 
-                if (length < 3) return;
                 for (int i = 3; i <= length; i++)
                 {
                     if (i == length || sublen[i] != sublen[i + 1])
                     {
                         _sublen[cachePos2] = (byte)(i - 3);
-                        _sublen[cachePos2 + 1] = (byte)(sublen[i] & 0xff);
-                        _sublen[cachePos2 + 2] = (byte)((sublen[i] >> 8) & 0xff);
+                        _sublen[cachePos2 + 1] = (byte) sublen[i];
+                        _sublen[cachePos2 + 2] = (byte) (sublen[i] >> 8);
                         bestlength = (uint)i;
                         j++;
                         cachePos2 += 3;
