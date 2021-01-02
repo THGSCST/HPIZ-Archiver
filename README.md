@@ -13,7 +13,7 @@ A new tool for a great old game. View, extract and compress HPI files faster usi
 **totala4.hpi uses LZ77 compression method*
 
 ## Dependencies
-Requires NET Framework 4.5 or higher.
+Requires NET Framework 4.6 or higher.
 
 ## Screenshot
 ![Screenshot](screenshot.png)
