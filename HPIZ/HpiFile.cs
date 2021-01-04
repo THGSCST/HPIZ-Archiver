@@ -119,10 +119,10 @@ namespace HPIZ
 
                 foreach (var file in entries)
                 {
-                    if(chunckWriter.BaseStream.Position > Int32.MaxValue)
-                        throw new Exception("Maximum allowed size is 2GB (2 147 483 647 bytes).");
+                    if(chunckWriter.BaseStream.Position > uint.MaxValue) 
+                        throw new Exception("Maximum allowed size is 4GB (4 294 967 295 bytes).");
 
-                    file.Value.OffsetOfCompressedData = (int)chunckWriter.BaseStream.Position;
+                    file.Value.OffsetOfCompressedData = (uint) chunckWriter.BaseStream.Position;
 
                     if (file.Value.FlagCompression != CompressionMethod.None)
                         foreach (var size in file.Value.compressedChunkSizes)
@@ -160,7 +160,6 @@ namespace HPIZ
 
                 if(fileStream.Length > Int32.MaxValue)
                     MessageBox.Show("The HPI file was created, but its size exceeds 2GB (2 147 483 647 bytes). A fatal error may occur when loading the game.", "Oversize Warning", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-
             }
 
         }

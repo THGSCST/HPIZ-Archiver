@@ -7,7 +7,7 @@ namespace HPIZ
     public class FileEntry
     {
         private HpiArchive parent;
-        public int OffsetOfCompressedData;
+        public uint OffsetOfCompressedData;
         public int UncompressedSize;
         public CompressionMethod FlagCompression;
         public int[] compressedChunkSizes;
@@ -15,7 +15,7 @@ namespace HPIZ
 
         public FileEntry(BinaryReader reader, HpiArchive parentArchive)
         {
-            OffsetOfCompressedData = reader.ReadInt32();
+            OffsetOfCompressedData = reader.ReadUInt32();
             UncompressedSize = reader.ReadInt32();
             FlagCompression = (CompressionMethod) reader.ReadByte();
             parent = parentArchive;

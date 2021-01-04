@@ -77,7 +77,7 @@ namespace HPIZ
                     var buffer = archiveReader.ReadBytes(chunkCount * 4);
 
                     if (obfuscationKey != 0)
-                        Clarify(buffer, entriesDictionary[entry].OffsetOfCompressedData);
+                        Clarify(buffer, (int) entriesDictionary[entry].OffsetOfCompressedData);
 
                     var size = new int[chunkCount];
                     Buffer.BlockCopy(buffer, 0, size, 0, buffer.Length);
@@ -190,7 +190,6 @@ namespace HPIZ
 
         public byte[] Extract(FileEntry file)
         {
-
             BinaryReader reader = new BinaryReader(archiveStream);
 
             if (file.FlagCompression == CompressionMethod.None)
@@ -199,7 +198,7 @@ namespace HPIZ
                 var uncompressedOutput = reader.ReadBytes(file.UncompressedSize);
 
                 if (obfuscationKey != 0)
-                    Clarify(uncompressedOutput, file.OffsetOfCompressedData);
+                    Clarify(uncompressedOutput, (int) file.OffsetOfCompressedData);
 
                 return uncompressedOutput;
             }
@@ -212,7 +211,7 @@ namespace HPIZ
             for (int i = 1; i < chunkCount; i++)
                     readPositions[i] = readPositions[i - 1] + file.compressedChunkSizes[i - 1];
             
-            int strReadPositions = file.OffsetOfCompressedData + (chunkCount * 4);
+            long strReadPositions = file.OffsetOfCompressedData + (chunkCount * 4);
             reader.BaseStream.Position = strReadPositions;
             var chunkBuffer = reader.ReadBytes(file.compressedChunkSizes.Sum());
 
@@ -222,7 +221,7 @@ namespace HPIZ
             Parallel.For(0, chunkCount, i =>
             {
                 if (obfuscationKey != 0)
-                    Clarify(chunkBuffer, readPositions[i] + strReadPositions, readPositions[i], file.compressedChunkSizes[i]);
+                    Clarify(chunkBuffer, (int) (readPositions[i] + strReadPositions), readPositions[i], file.compressedChunkSizes[i]);
 
                 var decompressedChunk = Chunk.Decompress(new MemoryStream(chunkBuffer, readPositions[i], file.compressedChunkSizes[i]));
 
