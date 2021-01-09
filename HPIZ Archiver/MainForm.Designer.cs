@@ -50,13 +50,6 @@
             this.progressBar = new System.Windows.Forms.ToolStripProgressBar();
             this.firstStatusLabel = new System.Windows.Forms.ToolStripStatusLabel();
             this.secondStatusLabel = new System.Windows.Forms.ToolStripStatusLabel();
-            this.listViewFiles = new HPIZArchiver.CollapsibleListView();
-            this.columnChecked = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
-            this.columnFullName = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
-            this.columnExt = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
-            this.columnSize = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
-            this.columnCompressed = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
-            this.columnRatio = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
             this.checkListContextMenu = new System.Windows.Forms.ContextMenuStrip(this.components);
             this.selectAllToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.unselectAllToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
@@ -66,6 +59,13 @@
             this.dialogOpenHpi = new System.Windows.Forms.OpenFileDialog();
             this.dialogExtractToFolder = new System.Windows.Forms.FolderBrowserDialog();
             this.dialogExtractFile = new System.Windows.Forms.SaveFileDialog();
+            this.listViewFiles = new HPIZArchiver.CollapsibleListView();
+            this.columnChecked = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
+            this.columnFullName = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
+            this.columnExt = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
+            this.columnSize = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
+            this.columnCompressed = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
+            this.columnRatio = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
             this.toolStrip.SuspendLayout();
             this.statusStrip.SuspendLayout();
             this.checkListContextMenu.SuspendLayout();
@@ -246,6 +246,7 @@
             // 
             this.progressBar.Name = "progressBar";
             this.progressBar.Size = new System.Drawing.Size(120, 18);
+            this.progressBar.Step = 1;
             this.progressBar.Style = System.Windows.Forms.ProgressBarStyle.Continuous;
             this.progressBar.Visible = false;
             // 
@@ -262,6 +263,62 @@
             this.secondStatusLabel.Spring = true;
             this.secondStatusLabel.Text = " ";
             this.secondStatusLabel.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
+            // 
+            // checkListContextMenu
+            // 
+            this.checkListContextMenu.ImageScalingSize = new System.Drawing.Size(20, 20);
+            this.checkListContextMenu.Items.AddRange(new System.Windows.Forms.ToolStripItem[] {
+            this.selectAllToolStripMenuItem,
+            this.unselectAllToolStripMenuItem,
+            this.invertSelectedToolStripMenuItem});
+            this.checkListContextMenu.Name = "checkListContextMenu";
+            this.checkListContextMenu.Size = new System.Drawing.Size(192, 76);
+            // 
+            // selectAllToolStripMenuItem
+            // 
+            this.selectAllToolStripMenuItem.Name = "selectAllToolStripMenuItem";
+            this.selectAllToolStripMenuItem.ShortcutKeys = ((System.Windows.Forms.Keys)((System.Windows.Forms.Keys.Control | System.Windows.Forms.Keys.A)));
+            this.selectAllToolStripMenuItem.Size = new System.Drawing.Size(191, 24);
+            this.selectAllToolStripMenuItem.Text = "Check All";
+            this.selectAllToolStripMenuItem.Click += new System.EventHandler(this.selectAllToolStripMenuItem_Click);
+            // 
+            // unselectAllToolStripMenuItem
+            // 
+            this.unselectAllToolStripMenuItem.Name = "unselectAllToolStripMenuItem";
+            this.unselectAllToolStripMenuItem.Size = new System.Drawing.Size(191, 24);
+            this.unselectAllToolStripMenuItem.Text = "Uncheck All";
+            this.unselectAllToolStripMenuItem.Click += new System.EventHandler(this.unselectAllToolStripMenuItem_Click);
+            // 
+            // invertSelectedToolStripMenuItem
+            // 
+            this.invertSelectedToolStripMenuItem.Name = "invertSelectedToolStripMenuItem";
+            this.invertSelectedToolStripMenuItem.Size = new System.Drawing.Size(191, 24);
+            this.invertSelectedToolStripMenuItem.Text = "Invert Checked";
+            this.invertSelectedToolStripMenuItem.Click += new System.EventHandler(this.invertSelectedToolStripMenuItem_Click);
+            // 
+            // dialogOpenFolder
+            // 
+            this.dialogOpenFolder.Description = "Select folder containing the files to be compressed";
+            this.dialogOpenFolder.RootFolder = System.Environment.SpecialFolder.MyComputer;
+            this.dialogOpenFolder.ShowNewFolderButton = false;
+            // 
+            // dialogSaveHpi
+            // 
+            this.dialogSaveHpi.Filter = "All TA Files|*.hpi;*.ccx;*.ufo;*.gp?|HPI Files|*.hpi|CCX Files|*.ccx|UFO Files|*." +
+    "ufo|GP Files|*.gp?|Any File|*.*";
+            this.dialogSaveHpi.SupportMultiDottedExtensions = true;
+            // 
+            // dialogOpenHpi
+            // 
+            this.dialogOpenHpi.Filter = "All TA Files|*.hpi;*.ccx;*.ufo;*.gp?|HPI Files|*.hpi|CCX Files|*.ccx|UFO Files|*." +
+    "ufo|GP Files|*.gp?|All Files|*.*";
+            this.dialogOpenHpi.Multiselect = true;
+            this.dialogOpenHpi.Title = "Select one or many HPI Files to Open";
+            // 
+            // dialogExtractToFolder
+            // 
+            this.dialogExtractToFolder.Description = "Folder to extract all checked files";
+            this.dialogExtractToFolder.RootFolder = System.Environment.SpecialFolder.MyComputer;
             // 
             // listViewFiles
             // 
@@ -325,62 +382,6 @@
             this.columnRatio.Text = "Ratio";
             this.columnRatio.TextAlign = System.Windows.Forms.HorizontalAlignment.Right;
             this.columnRatio.Width = 48;
-            // 
-            // checkListContextMenu
-            // 
-            this.checkListContextMenu.ImageScalingSize = new System.Drawing.Size(20, 20);
-            this.checkListContextMenu.Items.AddRange(new System.Windows.Forms.ToolStripItem[] {
-            this.selectAllToolStripMenuItem,
-            this.unselectAllToolStripMenuItem,
-            this.invertSelectedToolStripMenuItem});
-            this.checkListContextMenu.Name = "checkListContextMenu";
-            this.checkListContextMenu.Size = new System.Drawing.Size(192, 76);
-            // 
-            // selectAllToolStripMenuItem
-            // 
-            this.selectAllToolStripMenuItem.Name = "selectAllToolStripMenuItem";
-            this.selectAllToolStripMenuItem.ShortcutKeys = ((System.Windows.Forms.Keys)((System.Windows.Forms.Keys.Control | System.Windows.Forms.Keys.A)));
-            this.selectAllToolStripMenuItem.Size = new System.Drawing.Size(191, 24);
-            this.selectAllToolStripMenuItem.Text = "Check All";
-            this.selectAllToolStripMenuItem.Click += new System.EventHandler(this.selectAllToolStripMenuItem_Click);
-            // 
-            // unselectAllToolStripMenuItem
-            // 
-            this.unselectAllToolStripMenuItem.Name = "unselectAllToolStripMenuItem";
-            this.unselectAllToolStripMenuItem.Size = new System.Drawing.Size(191, 24);
-            this.unselectAllToolStripMenuItem.Text = "Uncheck All";
-            this.unselectAllToolStripMenuItem.Click += new System.EventHandler(this.unselectAllToolStripMenuItem_Click);
-            // 
-            // invertSelectedToolStripMenuItem
-            // 
-            this.invertSelectedToolStripMenuItem.Name = "invertSelectedToolStripMenuItem";
-            this.invertSelectedToolStripMenuItem.Size = new System.Drawing.Size(191, 24);
-            this.invertSelectedToolStripMenuItem.Text = "Invert Checked";
-            this.invertSelectedToolStripMenuItem.Click += new System.EventHandler(this.invertSelectedToolStripMenuItem_Click);
-            // 
-            // dialogOpenFolder
-            // 
-            this.dialogOpenFolder.Description = "Select folder containing the files to be compressed";
-            this.dialogOpenFolder.RootFolder = System.Environment.SpecialFolder.MyComputer;
-            this.dialogOpenFolder.ShowNewFolderButton = false;
-            // 
-            // dialogSaveHpi
-            // 
-            this.dialogSaveHpi.Filter = "All TA Files|*.hpi;*.ccx;*.ufo;*.gp?|HPI Files|*.hpi|CCX Files|*.ccx|UFO Files|*." +
-    "ufo|GP Files|*.gp?|Any File|*.*";
-            this.dialogSaveHpi.SupportMultiDottedExtensions = true;
-            // 
-            // dialogOpenHpi
-            // 
-            this.dialogOpenHpi.Filter = "All TA Files|*.hpi;*.ccx;*.ufo;*.gp?|HPI Files|*.hpi|CCX Files|*.ccx|UFO Files|*." +
-    "ufo|GP Files|*.gp?|All Files|*.*";
-            this.dialogOpenHpi.Multiselect = true;
-            this.dialogOpenHpi.Title = "Select one or many HPI Files to Open";
-            // 
-            // dialogExtractToFolder
-            // 
-            this.dialogExtractToFolder.Description = "Folder to extract all checked files";
-            this.dialogExtractToFolder.RootFolder = System.Environment.SpecialFolder.MyComputer;
             // 
             // MainForm
             // 

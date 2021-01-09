@@ -17,22 +17,22 @@ namespace HPIZArchiver
         /// <summary>
         /// Intercepts <see cref="ListView.WndProc(ref Message)"/> calls
         /// </summary>
-        /// <param name="message">Message</param>
-        protected override void WndProc(ref Message message)
+        /// <param name="m">Message</param>
+        protected override void WndProc(ref Message m)
         {
-            switch (message.Msg)
+            switch (m.Msg)
             {
                 case WM_LBUTTONUP:
-                    base.DefWndProc(ref message);
+                    base.DefWndProc(ref m);
                     break;
                 case LVM_INSERTGROUP:
-                    base.WndProc(ref message);
-                    var group = (LvGroup)Marshal.PtrToStructure(message.LParam, typeof(LvGroup));
+                    base.WndProc(ref m);
+                    var group = (LvGroup)Marshal.PtrToStructure(m.LParam, typeof(LvGroup));
                     SetGroupCollapsible(group.iGroupId);
                     return;
             }
 
-            base.WndProc(ref message);
+            base.WndProc(ref m);
         }
 
         /// <summary>

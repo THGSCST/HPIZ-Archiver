@@ -150,7 +150,6 @@ namespace HPIZ
 
         private static string ReadStringCP437NullTerminated(BinaryReader reader)
         {
-            Encoding codePage437 = Encoding.GetEncoding(437);
             var bytes = new Queue<byte>();
             byte b = reader.ReadByte();
             while (b != 0)
@@ -158,15 +157,15 @@ namespace HPIZ
                 bytes.Enqueue(b);
                 b = reader.ReadByte();
             }
-            var characters = codePage437.GetChars(bytes.ToArray());
 
-            char[] invalids = { '\"', '<', '>', '|', '\0', ':', '*', '?', '\\', '/' };
+            var characters = Encoding.GetEncoding(437).GetChars(bytes.ToArray());
+
+            char[] reserved = { '<', '>', '\"', ':', '/', '\\', '|', '?' , '*',};
  
             for (int i = 0; i < characters.Length; i++)
-            {
-                if (char.IsControl((characters[i])) || invalids.Contains((characters[i])))
-                        characters[i] = '_'; //Replace control or invalid char with underscore
-            }
+                if (char.IsControl(characters[i]) || reserved.Contains(characters[i]))
+                        characters[i] = '_'; //Replace control or reserved char with underscore
+
             return new string(characters);
         }
 
