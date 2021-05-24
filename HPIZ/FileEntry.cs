@@ -1,6 +1,7 @@
 ﻿using System;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 
 namespace HPIZ
 {
@@ -26,7 +27,7 @@ namespace HPIZ
             UncompressedSize = uncompressedBytes.Length;
             if (flavor != CompressionFlavor.StoreUncompressed && uncompressedBytes.Length > Strategy.DeflateBreakEven) //Skip compression of small files
             {
-                if (uncompressedBytes.Length > Chunk.MaxSize) //Split into chunks and compress
+                if (uncompressedBytes.Length > Chunk.MaxSize) //Split into chunks
                 {
                     compressedChunkSizes = new int[CalculateChunkQuantity()];
                     ChunkBytes = new MemoryStream[compressedChunkSizes.Length];
@@ -87,11 +88,51 @@ namespace HPIZ
                 reader.BaseStream.Position += compressedChunkSizes.Length * 4;
             var outputBytes = new byte[compressedChunkSizes.Length][];
             for (int i = 0; i < outputBytes.Length; i++)
-            {
                 outputBytes[i] = Chunk.Decompress( new MemoryStream(reader.ReadBytes(compressedChunkSizes[i])));
-            }
 
             return outputBytes;
+        }
+
+        public byte[] Uncompress()
+        {
+            BinaryReader reader = new BinaryReader(parent.archiveStream);
+
+            if (FlagCompression == CompressionMethod.None)
+            {
+                reader.BaseStream.Position = OffsetOfCompressedData;
+                var uncompressedOutput = reader.ReadBytes(UncompressedSize);
+                if (parent.obfuscationKey != 0)
+                    parent.Clarify(uncompressedOutput, (int)OffsetOfCompressedData);
+
+                return uncompressedOutput;
+            }
+
+            if (FlagCompression != CompressionMethod.LZ77 && FlagCompression != CompressionMethod.ZLib)
+                throw new Exception("Unknown compression method in file entry");
+
+            var chunkCount = compressedChunkSizes.Length;
+            var readPositions = new int[chunkCount];
+            for (int i = 1; i < chunkCount; i++)
+                readPositions[i] = readPositions[i - 1] + compressedChunkSizes[i - 1];
+
+            long strReadPositions = OffsetOfCompressedData + (chunkCount * 4);
+            reader.BaseStream.Position = strReadPositions;
+            var chunkBuffer = reader.ReadBytes(compressedChunkSizes.Sum());
+
+            var outBytes = new byte[UncompressedSize];
+
+            // Parallelize chunk decompression
+            Parallel.For(0, chunkCount, i =>
+            {
+                if (parent.obfuscationKey != 0)
+                    parent.Clarify(chunkBuffer, (int)(readPositions[i] + strReadPositions), readPositions[i], compressedChunkSizes[i]);
+
+                var decompressedChunk = Chunk.Decompress(new MemoryStream(chunkBuffer, readPositions[i], compressedChunkSizes[i]));
+
+                Buffer.BlockCopy(decompressedChunk, 0, outBytes, i * Chunk.MaxSize, decompressedChunk.Length);
+            }); // Parallel.For
+
+            return outBytes;
         }
 
         public int CompressedSizeCount()
@@ -112,7 +153,7 @@ namespace HPIZ
 
         public static int CalculateChunkQuantity(int size)
         {
-            return (size + 65535) / 65536;
+            return (size + Chunk.MaxSize - 1) / Chunk.MaxSize;
         }
 
         public int CalculateChunkQuantity()

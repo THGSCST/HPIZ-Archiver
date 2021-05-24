@@ -15,14 +15,16 @@ namespace HPIZArchiver
         SortedSet<string> uniqueFiles = new SortedSet<string>();
         SortedSet<string> uniqueItens = new SortedSet<string>();
         List<string> duplicatedItens = new List<string>();
+
+        Stopwatch timer = new Stopwatch();
+
         public MainForm()
         {
             InitializeComponent();
         }
         private void MainForm_Load(object sender, EventArgs e)
         {
-            flavorLevelComboBox.ComboBox.DataSource = Enum.GetValues(typeof(CompressionFlavor));
-            flavorLevelComboBox.ComboBox.BindingContext = this.BindingContext;
+            flavorLevelComboBox.Items.AddRange(Enum.GetNames(typeof(CompressionFlavor)));
             flavorLevelComboBox.SelectedIndex = 4;
         }
         enum ArchiverMode { Empty, Busy, File, Dir, Finish }
@@ -51,6 +53,7 @@ namespace HPIZArchiver
             uniqueFiles.Clear();
             uniqueItens.Clear();
             duplicatedItens.Clear();
+            rulesStripButton.Enabled = false;
             SetMode(ArchiverMode.Empty);
             firstStatusLabel.Text = "No files or directories opened";
             secondStatusLabel.Text = string.Empty;
@@ -212,7 +215,7 @@ namespace HPIZArchiver
                     firstStatusLabel.Text = "Extracting " + listViewFiles.CheckedItems.Count.ToString() + " files...";
 
                     var fileList = GetCheckedFileNames();
-                    progressBar.Maximum = fileList.Values.Sum(x => x.Count) + 1;
+                    progressBar.Maximum = fileList.Values.Sum(x => x.Count);
 
                     var progress = new Progress<string>(percent =>
                     {
@@ -220,8 +223,7 @@ namespace HPIZArchiver
                         TaskbarProgress.SetValue(this.Handle, progressBar.Value, progressBar.Maximum);
                     });
 
-                    var timer = new Stopwatch();
-                    timer.Start();
+                    timer.Restart();
 
                     await Task.Run(() => HpiFile.DoExtraction(fileList, dialogExtractToFolder.SelectedPath, progress));
 
@@ -293,8 +295,7 @@ namespace HPIZArchiver
                     TaskbarProgress.SetValue(this.Handle, progressBar.Value, progressBar.Maximum);
                 });
 
-                var timer = new Stopwatch();
-                timer.Start();
+                timer.Restart();
 
                 await Task.Run(() => HpiFile.CreateFromFileList(fileList[target].ToArray(), target, dialogSaveHpi.FileName, progress, flavor));
 
@@ -375,8 +376,7 @@ namespace HPIZArchiver
                     TaskbarProgress.SetValue(this.Handle, progressBar.Value, progressBar.Maximum);
                 });
 
-                var timer = new Stopwatch();
-                timer.Start();
+                timer.Restart();
 
                 await Task.Run(() => HpiFile.Merge(fileList, dialogSaveHpi.FileName, flavor, progress));
 

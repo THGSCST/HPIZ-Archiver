@@ -24,11 +24,6 @@ namespace HPIZ
             MemoryStream output = new MemoryStream(bytesToCompress.Length);
             BinaryWriter writer = new BinaryWriter(output);
 
-            writer.Write(Chunk.Header);
-            writer.Write(Chunk.DefaultVersion);
-            writer.Write((byte) CompressionMethod.ZLib);
-            writer.Write(NoObfuscation);
-
             writer.BaseStream.Position = OverheadSize;
             writer.Write((byte) 0x78); //ZLib header first byte
             writer.Write((byte) 0xDA); //ZLib header second byte
@@ -44,7 +39,7 @@ namespace HPIZ
                 case CompressionFlavor.i10ZopfliDeflate:
                 case CompressionFlavor.i15ZopfliDeflate:
 
-                    if(bytesToCompress.Length < Strategy.ZopfliBreakEven) //Skip Zopfli if file is small
+                    if(bytesToCompress.Length < Strategy.ZopfliBreakEven) //Skip Zopfli if chunk is small
                         goto case CompressionFlavor.ZLibDeflate;
 
                     ZopfliDeflater zstream = new ZopfliDeflater(output);
@@ -58,8 +53,12 @@ namespace HPIZ
             }
 
             WriteAdler32(bytesToCompress, output);
-
-            output.Position = 7;
+            
+            output.Position = 0;
+            writer.Write(Chunk.Header);
+            writer.Write(Chunk.DefaultVersion);
+            writer.Write((byte)CompressionMethod.ZLib);
+            writer.Write(NoObfuscation);
             writer.Write((int) output.Length - OverheadSize);
             writer.Write(bytesToCompress.Length);
 
@@ -75,7 +74,7 @@ namespace HPIZ
         {
             BinaryReader reader = new BinaryReader(bytesToDecompress);
             int headerMark = reader.ReadInt32();
-            if (headerMark != Chunk.Header) throw new InvalidDataException("Invalid Chunk Header");
+            if (headerMark != Header) throw new InvalidDataException("Invalid Chunk Header");
 
             int version = reader.ReadByte();
             if (version != DefaultVersion) throw new NotImplementedException("Unsuported Chunk Version");

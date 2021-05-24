@@ -16,7 +16,7 @@ namespace HPIZ
         internal const int HeaderSize = 20;
 
         internal readonly Stream archiveStream;
-        private readonly int obfuscationKey;
+        internal readonly int obfuscationKey;
         private readonly SortedDictionary<string, FileEntry> entriesDictionary;
         public ReadOnlyDictionary<string, FileEntry> Entries { get; }
 
@@ -105,7 +105,7 @@ namespace HPIZ
                     GetEntries(reader.ReadInt32(), reader.ReadInt32(), reader, fullPath);
                 else
                 {
-                    FileEntry fd = new FileEntry(reader , this);
+                    FileEntry fd = new FileEntry(reader, this);
                     entriesDictionary.Add(fullPath, fd);
                 }
             }
@@ -176,58 +176,15 @@ namespace HPIZ
             reader.Write(byte.MinValue); //Zero byte to end string
         }
 
-        void Clarify(byte[] obfuscatedBytes, int position, int start = 0, int end = 0)
+        internal void Clarify(byte[] obfuscatedBytes, int position, int start = 0, int end = 0)
         {
             if (end == 0) end = obfuscatedBytes.Length;
             else end = end + start;
             for (int i = start; i < end; ++i)
             {
-                obfuscatedBytes[i] = (byte) ~(position ^ obfuscationKey ^ obfuscatedBytes[i]);
+                unchecked { obfuscatedBytes[i] = (byte) ~(position ^ obfuscationKey ^ obfuscatedBytes[i]); }
                 position++;
             }
-        }
-
-        public byte[] Extract(FileEntry file)
-        {
-            BinaryReader reader = new BinaryReader(archiveStream);
-
-            if (file.FlagCompression == CompressionMethod.None)
-            {
-                reader.BaseStream.Position = file.OffsetOfCompressedData;
-                var uncompressedOutput = reader.ReadBytes(file.UncompressedSize);
-
-                if (obfuscationKey != 0)
-                    Clarify(uncompressedOutput, (int) file.OffsetOfCompressedData);
-
-                return uncompressedOutput;
-            }
-            
-            if(file.FlagCompression != CompressionMethod.LZ77 && file.FlagCompression != CompressionMethod.ZLib)
-                throw new Exception("Unknown compression method in file entry");
-
-            var chunkCount = file.compressedChunkSizes.Length;
-            var readPositions = new int[chunkCount];
-            for (int i = 1; i < chunkCount; i++)
-                    readPositions[i] = readPositions[i - 1] + file.compressedChunkSizes[i - 1];
-            
-            long strReadPositions = file.OffsetOfCompressedData + (chunkCount * 4);
-            reader.BaseStream.Position = strReadPositions;
-            var chunkBuffer = reader.ReadBytes(file.compressedChunkSizes.Sum());
-
-            var outBytes = new byte[file.UncompressedSize];
-
-            // Parallelize chunk decompression
-            Parallel.For(0, chunkCount, i =>
-            {
-                if (obfuscationKey != 0)
-                    Clarify(chunkBuffer, (int) (readPositions[i] + strReadPositions), readPositions[i], file.compressedChunkSizes[i]);
-
-                var decompressedChunk = Chunk.Decompress(new MemoryStream(chunkBuffer, readPositions[i], file.compressedChunkSizes[i]));
-
-                Buffer.BlockCopy(decompressedChunk, 0, outBytes, i * Chunk.MaxSize, decompressedChunk.Length);
-            }); // Parallel.For
-
-            return outBytes;
         }
 
         #region IDisposable Support

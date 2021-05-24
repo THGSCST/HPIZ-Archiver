@@ -46,7 +46,6 @@ namespace HPIZ
 
             for (int i = 0; i < fileListShortName.Length; i++)
             {
-
                 string fullName = Path.Combine(sourceDirectoryPath, fileListShortName[i]);
                 var file = new FileInfo(fullName);
                 if (file.Length > Int32.MaxValue)
@@ -54,11 +53,9 @@ namespace HPIZ
                 byte[] buffer = File.ReadAllBytes(fullName);
 
                 files.Add(fileListShortName[i], new FileEntry(buffer, flavor, fullName, progress));
-
             }
 
             WriteToFile(destinationArchiveFileName, files);
-
         }
 
         public static void DoExtraction(PathCollection archivesFiles, string destinationPath, IProgress<string> progress)
@@ -74,13 +71,12 @@ namespace HPIZ
                         string fullName = destinationPath + "\\" + shortFileName;
                         Directory.CreateDirectory(Path.GetDirectoryName(fullName));
                         var entry = archive.Entries[shortFileName];
-                        File.WriteAllBytes(fullName, archive.Extract(entry));
+                        File.WriteAllBytes(fullName, entry.Uncompress());
 
                         //Report progress
                         if (progress != null) //&& i % progressLimiter == 0)
                             progress.Report(shortFileName);
                     }
-
                 }
             }
         }
@@ -92,9 +88,8 @@ namespace HPIZ
                 using (var archive = new HpiArchive(File.OpenRead(archiveFullPath)))
                     foreach (var shortFileName in archivesFiles[archiveFullPath])
                     {
-
                         var entry = archive.Entries[shortFileName];
-                        var buffer = archive.Extract(entry);
+                        var buffer = entry.Uncompress();
 
                         if (files.ContainsKey(shortFileName))
                             files[shortFileName] = new FileEntry(buffer, flavor, shortFileName, progress);
@@ -106,50 +101,40 @@ namespace HPIZ
 
         private static void WriteToFile(string destinationArchiveFileName, SortedDictionary<string, FileEntry> entries)
         {
-            var tree = new DirectoryTree(); //Provisory Tree
+            var tree = new DirectoryTree();
             foreach (var fileName in entries.Keys)
                 tree.AddEntry(fileName);
-            int directorySize = tree.CalculateSize() + HpiArchive.HeaderSize;
+            int chunkStartPosition = tree.CalculateSize() + HpiArchive.HeaderSize;
 
             using (var fileStream = File.Create(destinationArchiveFileName))
             {
-                BinaryWriter chunckWriter = new BinaryWriter(fileStream);
-
-                chunckWriter.BaseStream.Position = directorySize;
+                BinaryWriter chunkWriter = new BinaryWriter(fileStream);
+                chunkWriter.BaseStream.Position = chunkStartPosition;
 
                 foreach (var file in entries)
                 {
-                    if(chunckWriter.BaseStream.Position > uint.MaxValue) 
-                        throw new Exception("Maximum allowed size is 4GB (4 294 967 295 bytes).");
+                    if(chunkWriter.BaseStream.Position > uint.MaxValue) 
+                        throw new Exception("Maximum allowed archive size is 4GB (4 294 967 295 bytes).");
 
-                    file.Value.OffsetOfCompressedData = (uint) chunckWriter.BaseStream.Position;
+                    file.Value.OffsetOfCompressedData = (uint) chunkWriter.BaseStream.Position;
 
                     if (file.Value.FlagCompression != CompressionMethod.None)
                         foreach (var size in file.Value.compressedChunkSizes)
-                            chunckWriter.Write(size);
+                            chunkWriter.Write(size);
 
                     foreach (var chunk in file.Value.ChunkBytes)
-                        chunk.WriteTo(chunckWriter.BaseStream);
+                        chunk.WriteTo(chunkWriter.BaseStream);
                 }
                 string mandatoryEnding = "Copyright " + DateTime.Now.Year.ToString() + " Cavedog Entertainment";
-                chunckWriter.Write(System.Text.Encoding.GetEncoding(437).GetBytes(mandatoryEnding));
+                chunkWriter.Write(System.Text.Encoding.GetEncoding(437).GetBytes(mandatoryEnding));
 
                 BinaryWriter headerWriter = new BinaryWriter(new MemoryStream());
 
-                headerWriter.BaseStream.Position = 0;
-
                 headerWriter.Write(HpiArchive.HeaderMarker);
                 headerWriter.Write(HpiArchive.DefaultVersion);
-
-                tree = new DirectoryTree(); //Definitive Tree
-                foreach (var item in entries.Keys)
-                    tree.AddEntry(item);
-                directorySize = tree.CalculateSize() + HpiArchive.HeaderSize; //TO IMPROVE, BAD CODE
-                headerWriter.Write(directorySize);
-
+                headerWriter.Write(chunkStartPosition);
                 headerWriter.Write(HpiArchive.NoObfuscationKey);
-
-                headerWriter.Write(HpiArchive.HeaderSize); //Directory Start at Pos20
+                headerWriter.Write(HpiArchive.HeaderSize); //Directory Start
 
                 IEnumerator<FileEntry> sequence = entries.Values.ToList().GetEnumerator();
                 HpiArchive.SetEntries(tree, headerWriter, sequence);
