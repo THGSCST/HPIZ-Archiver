@@ -456,21 +456,21 @@ namespace CompressSharper.Zopfli
             unchecked
             {
 
-                _writer.Write((byte)(finalBlock ? 1 : 0));
+                _writer.Write(finalBlock);
                 _writer.Write(0, 2);
 
                 _writer.FlushBits();
 
-                ushort count = (ushort)(bufferEnd - bufferStart);
-                ushort ncount = (ushort)(~count);
+                int count = bufferEnd - bufferStart;
+                int ncount = ~count;
 
                 _writer.Write(new byte[]
                 {
-                    (byte) count,  (byte) (count >>8),
-                    (byte) ncount, (byte) (ncount >>8)
+                    (byte) count,  (byte) (count >> 8),
+                    (byte) ncount, (byte) (ncount >> 8)
                 });
 
-                _writer.Write(buffer, bufferStart, bufferEnd - bufferStart);
+                _writer.Write(buffer, bufferStart, count);
             }
         }
 
@@ -632,19 +632,19 @@ namespace CompressSharper.Zopfli
 
             private class NodePool
             {
-                private Queue<Node> _freeNodes;
+                private Stack<Node> _freeNodes;
 
                 private Node[] _pool;
 
                 public NodePool(int size)
                 {
                     _pool = new Node[size];
-                    _freeNodes = new Queue<Node>(size);
+                    _freeNodes = new Stack<Node>(size);
 
                     for (int i = 0; i < size; i++)
                     {
-                        _pool[i] = new Node(i + 1);
-                        _freeNodes.Enqueue(_pool[i]);
+                        _pool[i] = new Node(i);
+                        _freeNodes.Push(_pool[i]);
                     }
                 }
 
@@ -653,7 +653,7 @@ namespace CompressSharper.Zopfli
                     //if we can find a new one right away
                     if (_freeNodes.Count > 0)
                     {
-                        Node ret = _freeNodes.Dequeue();
+                        Node ret = _freeNodes.Pop();
                         ret._weight = weight;
                         ret._count = count;
                         ret._tail = tail;
@@ -667,45 +667,32 @@ namespace CompressSharper.Zopfli
                         _pool[i]._inUse = false;
                     }
 
-                    _freeNodes.Clear();
-
                     for (int j = 0; j < lists[0].Length; j++)
                     {
-                        if (lists[0][j]._id > 0)
-                        {
-                            _pool[lists[0][j]._id - 1]._inUse = true;
+                            _pool[lists[0][j]._id]._inUse = true;
 
                             for (Node n = lists[0][j]._tail; n != null; n = n._tail)
                             {
-                                if (n._id > 0)
-                                {
-                                    _pool[n._id - 1]._inUse = true;
-                                }
+                                    _pool[n._id]._inUse = true;
                             }
-                        }
                     }
 
                     for (int j = 0; j < lists[1].Length; j++)
                     {
-                        if (lists[1][j]._id > 0)
-                        {
-                            _pool[lists[1][j]._id - 1]._inUse = true;
+                            _pool[lists[1][j]._id]._inUse = true;
 
                             for (Node n = lists[1][j]._tail; n != null; n = n._tail)
                             {
-                                if (n._id > 0)
-                                {
-                                    _pool[n._id - 1]._inUse = true;
-                                }
+                                    _pool[n._id]._inUse = true;
                             }
-                        }
+                        
                     }
 
                     for (int i = 0; i < _pool.Length; i++)
                     {
                         if (!_pool[i]._inUse)
                         {
-                            _freeNodes.Enqueue(_pool[i]);
+                            _freeNodes.Push(_pool[i]);
                         }
                     }
 
@@ -925,24 +912,20 @@ namespace CompressSharper.Zopfli
                 int[] ll_symbols = new int[288];
                 int[] d_symbols = new int[32];
 
+                writer.Write(finalBlock);
+
                 if (_blockType == BlockType.Fixed)
                 {
-                    if (finalBlock) writer.Write(0b1);
-                    else writer.Write(0b0);
-
-                    writer.Write(1);
-                    writer.Write(0);
+                    writer.Write(true);
+                    writer.Write(false);
 
                     /* Fixed block. */
                     GetFixedTree(ref ll_lengths, ref d_lengths);
                 }
                 else
                 {
-                    if (finalBlock) writer.Write(0b1);
-                    else writer.Write(0b0);
-
-                    writer.Write(0);
-                    writer.Write(1);
+                    writer.Write(false);
+                    writer.Write(true);
 
                     /* Dynamic block. */
                     CalculateLZ77Counts(start, end, ref ll_counts, ref d_counts);
@@ -3133,6 +3116,7 @@ namespace CompressSharper.Zopfli
 
         #region Properties/Fields
 
+        private byte[] _buffer = new byte[2];
         private int _bitBuffer;
         private int _bitCount;
         private Stream _stream;
@@ -3145,14 +3129,10 @@ namespace CompressSharper.Zopfli
         /// </summary>
         public void FlushBits()
         {
-            //do a sanity check on the stream
-            if (_stream == null ||
-                !_stream.CanWrite)
-                return;
-
             if (_bitCount > 0)
             {
-                _stream.Write(new[] { (byte)_bitBuffer }, 0, 1);
+                _buffer[0] = (byte)_bitBuffer;
+                _stream.Write(_buffer, 0, 1);
                 _bitCount = 0;
                 _bitBuffer = 0;
             }
@@ -3162,9 +3142,11 @@ namespace CompressSharper.Zopfli
         /// Write a single bit
         /// </summary>
         /// <param name="value">The bit to write</param>
-        public void Write(byte value)
+        public void Write(bool value)
         {
-            Write(value, 1);
+            if(value)
+                _bitBuffer |= 1 << _bitCount;
+            _bitCount++;
         }
 
         /// <summary>
@@ -3174,11 +3156,6 @@ namespace CompressSharper.Zopfli
         /// <param name="numberOfBits">The number if bits to write</param>
         public void Write(int value, int numberOfBits)
         {
-            //sanity check the stream
-            if (_stream == null ||
-                !_stream.CanWrite)
-                return;
-
             PrivateWrite(value, numberOfBits);
         }
 
@@ -3188,9 +3165,6 @@ namespace CompressSharper.Zopfli
         /// <param name="buffer">The bytes to write</param>
         public void Write(byte[] buffer)
         {
-            if (buffer == null)
-                return;
-
             Write(buffer, 0, buffer.Length);
         }
 
@@ -3202,17 +3176,11 @@ namespace CompressSharper.Zopfli
         /// <param name="count">The total number of bytes to write</param>
         public void Write(byte[] buffer, int offset, int count)
         {
-            //sanity check the stream
-            if (_stream == null ||
-                !_stream.CanWrite)
-            {
-                return;
-            }
-
             if (_bitCount == 0)
                 _stream.Write(buffer, offset, count);
             else
-                WriteUnaligned(buffer, offset, count);
+                for (int i = offset; i < (offset + count); i++)
+                    PrivateWrite(buffer[i], 8);
         }
 
         /// <summary>
@@ -3222,12 +3190,11 @@ namespace CompressSharper.Zopfli
         /// <param name="numberOfBits">The number if bits to write</param>
         public void WriteHuffman(int value, int numberOfBits)
         {
-            //sanity check the stream
-            if (_stream == null ||
-                !_stream.CanWrite)
-                return;
-
-            PrivateWriteHuffman(value, numberOfBits);
+            for (int i = numberOfBits - 1; i >= 0; i--)
+            {
+                _bitBuffer |= ((value >> i) & 1) << _bitCount++;
+            }
+            WriteBuffer();
         }
         #endregion Public Methods
 
@@ -3241,34 +3208,29 @@ namespace CompressSharper.Zopfli
 
             _bitCount += numberOfBits;
 
-            while (_bitCount >= 8)
+            WriteBuffer();
+        }
+
+        private void WriteBuffer()
+        {
+            if (_bitCount >= 16)
             {
-                _stream.Write(new[] { (byte)(_bitBuffer & 0xFF) }, 0, 1);
+                _buffer[0] = (byte)_bitBuffer;
+                _buffer[1] = (byte)(_bitBuffer >> 8);
+                _stream.Write(_buffer, 0, 2);
+                _bitCount -= 16;
+                _bitBuffer >>= 16;
+            }
+
+            else if (_bitCount >= 8)
+            {
+                _buffer[0] = (byte)_bitBuffer;
+                _stream.Write(_buffer, 0, 1);
                 _bitCount -= 8;
                 _bitBuffer >>= 8;
             }
         }
 
-        private void PrivateWriteHuffman(int value, int numberOfBits)
-        {
-            for (int i = 0; i < numberOfBits; i++)
-            {
-                _bitBuffer |= (byte)(((value >> (numberOfBits - i - 1)) & 1) << _bitCount++);
-
-                if (_bitCount >= 8)
-                {
-                    _stream.Write(new[] { (byte)_bitBuffer }, 0, 1);
-                    _bitCount -= 8;
-                    _bitBuffer >>= 8;
-                }
-            }
-        }
-
-        private void WriteUnaligned(byte[] buffer, int offset, int count)
-        {
-            for (int i = offset; i < (offset + count); i++)
-                PrivateWrite(buffer[i], 8);
-        }
         #endregion Private Methods
     }
 
