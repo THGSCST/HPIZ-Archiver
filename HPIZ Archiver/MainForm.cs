@@ -232,6 +232,7 @@ namespace HPIZArchiver
                     firstStatusLabel.Text = String.Format("Done! Elapsed time: {0}m {1}s {2}ms", timer.Elapsed.Minutes,
                     timer.Elapsed.Seconds, timer.Elapsed.Milliseconds);
                     secondStatusLabel.Text = dialogExtractToFolder.SelectedPath;
+                    TaskbarProgress.FlashWindow(this.Handle, true);
                     SetMode(ArchiverMode.Finish);
                 }
             }
@@ -304,6 +305,7 @@ namespace HPIZArchiver
                 firstStatusLabel.Text = String.Format("Done! Elapsed time: {0}h {1}m {2}s {3}ms", timer.Elapsed.Hours, timer.Elapsed.Minutes,
                 timer.Elapsed.Seconds, timer.Elapsed.Milliseconds);
                 secondStatusLabel.Text = dialogSaveHpi.FileName;
+                TaskbarProgress.FlashWindow(this.Handle, true);
                 SetMode(ArchiverMode.Finish);
             }
         }
@@ -385,6 +387,7 @@ namespace HPIZArchiver
                 firstStatusLabel.Text = String.Format("Done! Elapsed time: {0}h {1}m {2}s {3}ms", timer.Elapsed.Hours, timer.Elapsed.Minutes,
                 timer.Elapsed.Seconds, timer.Elapsed.Milliseconds);
                 secondStatusLabel.Text = dialogSaveHpi.FileName;
+                TaskbarProgress.FlashWindow(this.Handle, true);
                 SetMode(ArchiverMode.Finish);
             }
         }
