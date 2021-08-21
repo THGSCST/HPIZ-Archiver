@@ -106,9 +106,10 @@
             this.secondStatusLabel.DisplayStyle = System.Windows.Forms.ToolStripItemDisplayStyle.Text;
             this.secondStatusLabel.Margin = new System.Windows.Forms.Padding(0, 4, 4, 2);
             this.secondStatusLabel.Name = "secondStatusLabel";
-            this.secondStatusLabel.Size = new System.Drawing.Size(672, 20);
+            this.secondStatusLabel.Size = new System.Drawing.Size(511, 20);
             this.secondStatusLabel.Spring = true;
             this.secondStatusLabel.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
+            this.secondStatusLabel.Click += new System.EventHandler(this.secondStatusLabel_Click);
             // 
             // checkListContextMenu
             // 

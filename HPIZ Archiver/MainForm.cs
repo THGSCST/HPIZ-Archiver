@@ -59,6 +59,7 @@ namespace HPIZArchiver
             SetMode(ArchiverMode.Empty);
             firstStatusLabel.Text = "No files or directories opened";
             secondStatusLabel.Text = string.Empty;
+            secondStatusLabel.IsLink = false;
             progressBar.Value = 0;
             TaskbarProgress.SetState(this.Handle, TaskbarProgress.ProgressState.None);
         }
@@ -243,6 +244,7 @@ namespace HPIZArchiver
                     timer.Elapsed.Seconds, timer.Elapsed.Milliseconds);
                     progressBar.Value = progressBar.Maximum;
                     secondStatusLabel.Text = dialogExtractToFolder.SelectedPath;
+                    secondStatusLabel.IsLink = true;
                     TaskbarProgress.FlashWindow(this.Handle, true);
                     SetMode(ArchiverMode.Finish);
                 }
@@ -320,6 +322,7 @@ namespace HPIZArchiver
                 timer.Elapsed.Seconds, timer.Elapsed.Milliseconds);
                 progressBar.Value = progressBar.Maximum;
                 secondStatusLabel.Text = dialogSaveHpi.FileName;
+                secondStatusLabel.IsLink = true;
                 TaskbarProgress.FlashWindow(this.Handle, true);
                 SetMode(ArchiverMode.Finish);
             }
@@ -405,6 +408,7 @@ namespace HPIZArchiver
                 firstStatusLabel.Text = String.Format("Done! Elapsed time: {0}h {1}m {2}s {3}ms", timer.Elapsed.Hours, timer.Elapsed.Minutes,
                 timer.Elapsed.Seconds, timer.Elapsed.Milliseconds);
                 secondStatusLabel.Text = dialogSaveHpi.FileName;
+                secondStatusLabel.IsLink = true;
                 TaskbarProgress.FlashWindow(this.Handle, true);
                 SetMode(ArchiverMode.Finish);
             }
@@ -467,6 +471,14 @@ namespace HPIZArchiver
         {
             if (dRules != DuplicateRules.NoDuplicates)
                 SetRule(DuplicateRules.NoDuplicates);
+        }
+
+        private void secondStatusLabel_Click(object sender, EventArgs e)
+        {
+            if(secondStatusLabel.IsLink)
+            {
+                Process.Start("explorer.exe", "/select," + secondStatusLabel.Text);
+            }
         }
     }
 }
