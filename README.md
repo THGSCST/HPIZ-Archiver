@@ -1,7 +1,7 @@
 # HPIZ Archiver
 A new tool for a great old game. View, extract and compress HPI files faster using multithreading and achieve maximum compression with Zopfli DEFLATE.
 
-## Compression Benchmark r1.2.3
+## Compression Benchmark r1.2.4
 
 | File             | Original Size (zlib) | New Size (Zopfli) | Reduction | Time Elapsed |
 |------------------|----------------------|-------------------|-----------|--------------|
