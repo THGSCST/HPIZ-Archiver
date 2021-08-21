@@ -12,11 +12,13 @@ namespace HPIZArchiver
 {
     public partial class MainForm : Form
     {
-        SortedSet<string> uniqueFiles = new SortedSet<string>();
-        SortedSet<string> uniqueItens = new SortedSet<string>();
-        List<string> duplicatedItens = new List<string>();
+        SortedSet<string> uniqueFiles = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
+        Dictionary<string, List<ListViewItem>> uniqueItens = new Dictionary<string, List<ListViewItem>>(StringComparer.OrdinalIgnoreCase);
 
         Stopwatch timer = new Stopwatch();
+
+        DuplicateRules dRules = DuplicateRules.KeepFirst;
+        enum DuplicateRules { KeepFirst, KeepLast, NoDuplicates }
 
         public MainForm()
         {
@@ -52,7 +54,7 @@ namespace HPIZArchiver
             listViewFiles.Enabled = true;
             uniqueFiles.Clear();
             uniqueItens.Clear();
-            duplicatedItens.Clear();
+            dRules = DuplicateRules.KeepFirst;
             rulesStripButton.Enabled = false;
             SetMode(ArchiverMode.Empty);
             firstStatusLabel.Text = "No files or directories opened";
@@ -75,18 +77,23 @@ namespace HPIZArchiver
 
                 if(item.Group.Name == newGroupName)
                 {
-                    if (uniqueItens.Add(item.SubItems[1].Text))
-                            item.Checked = true;
+                    if (uniqueItens.ContainsKey(item.SubItems[1].Text))
+                    {
+                        uniqueItens[item.SubItems[1].Text].Add(item);
+                        rulesStripButton.Enabled = true;
+                        item.SubItems[1].Font = new System.Drawing.Font(item.Font, System.Drawing.FontStyle.Bold);
+                        uniqueItens[item.SubItems[1].Text][0].SubItems[1].Font = item.SubItems[1].Font;
+                    }
                     else
-                        {
-                            rulesStripButton.Enabled = true;
-                            duplicatedItens.Add(item.SubItems[1].Text);
-                        }
+                    {
+                    uniqueItens.Add(item.SubItems[1].Text, new List<ListViewItem>() { item });
+                    }
 
                     listViewFiles.Items.Add(item);
                 }
             }
-                listViewFiles.EndUpdate();
+            SetRule(dRules);
+            listViewFiles.EndUpdate();
         }
         
         internal void CalculateTotalListSizes()
@@ -109,11 +116,10 @@ namespace HPIZArchiver
             else
                 firstStatusLabel.Text += " (uncompressed) inside " + listViewFiles.Groups.Count.ToString() + " opened directory(ies).";
 
-            if (duplicatedItens.Count > 0)
-                secondStatusLabel.Text = "Duplicated names found: " + duplicatedItens.Count.ToString();
+                secondStatusLabel.Text = "Duplicated names found: " + (listViewFiles.Items.Count - uniqueItens.Count).ToString();
         }
 
-        internal async void hPIFileToExtractToolStripMenuItem_Click(object sender, EventArgs e)
+        internal async void openFilesStripMenuItem_Click(object sender, EventArgs e)
         {
             if (dialogOpenHpi.ShowDialog() == DialogResult.OK)
             {
@@ -152,7 +158,6 @@ namespace HPIZArchiver
             }
         }
 
-
         public List<ListViewItem> GetListViewGroupItens(string fullPath)
         {
             var listColection = new List<ListViewItem>();
@@ -161,7 +166,7 @@ namespace HPIZArchiver
             if (fileAtt.HasFlag(FileAttributes.Directory)) //Directory
             {
                 var fileList = Directory.GetFiles(fullPath, "*", SearchOption.AllDirectories);
-                var group = new ListViewGroup(fullPath, "Dir: " + fullPath);
+                var group = new ListViewGroup(fullPath, "Directory " + fullPath);
                 foreach (var file in fileList)
                 {
                     var finfo = new FileInfo(file);
@@ -177,12 +182,13 @@ namespace HPIZArchiver
                     lvItem.SubItems[1].Tag = fullPath;
                     lvItem.SubItems[3].Tag = (int)finfo.Length;
                     lvItem.Tag = fullPath;
+                    lvItem.UseItemStyleForSubItems = false;
                     listColection.Add(lvItem);
                 }
             }
             else //HPI File or Files
             {
-                var group = new ListViewGroup(fullPath, Path.GetExtension(fullPath).ToUpper() + " File: " + fullPath);
+                var group = new ListViewGroup(fullPath, Path.GetExtension(fullPath).ToUpper() + " File - " + fullPath);
                 using (HpiArchive hpia = HpiFile.Open(fullPath))
                     foreach (var entry in hpia.Entries)
                     {
@@ -199,6 +205,7 @@ namespace HPIZArchiver
                         lvItem.SubItems[4].Tag = entry.Value.CompressedSizeCount();
                         lvItem.SubItems[5].Tag = entry.Value.Ratio();
                         lvItem.Tag = fullPath;
+                        lvItem.UseItemStyleForSubItems = false;
                         listColection.Add(lvItem);
                     }
             }
@@ -207,7 +214,10 @@ namespace HPIZArchiver
 
         private async void toolStripExtractButton_Click(object sender, EventArgs e)
         {
-            if (listViewFiles.CheckedItems.Count > 0)
+            if (listViewFiles.CheckedItems.Count == 0)
+                MessageBox.Show("Can't Extract: No files have been checked in the list.");
+
+            else if (listViewFiles.CheckedItems.Count > 0)
             {
                 if (dialogExtractToFolder.ShowDialog() == DialogResult.OK)
                 {
@@ -231,6 +241,7 @@ namespace HPIZArchiver
 
                     firstStatusLabel.Text = String.Format("Done! Elapsed time: {0}m {1}s {2}ms", timer.Elapsed.Minutes,
                     timer.Elapsed.Seconds, timer.Elapsed.Milliseconds);
+                    progressBar.Value = progressBar.Maximum;
                     secondStatusLabel.Text = dialogExtractToFolder.SelectedPath;
                     TaskbarProgress.FlashWindow(this.Handle, true);
                     SetMode(ArchiverMode.Finish);
@@ -241,23 +252,23 @@ namespace HPIZArchiver
         public PathCollection GetCheckedFileNames()
         {
             PathCollection fileList = new PathCollection();
-            for (int i = 0; i < listViewFiles.Groups.Count; i++)
-            {
-                fileList.Add(listViewFiles.Groups[i].Name, new SortedSet<string>());
 
-                for (int j = 0; j < listViewFiles.Groups[i].Items.Count; j++)
-                    if (listViewFiles.Groups[i].Items[j].Checked)
-                        fileList[listViewFiles.Groups[i].Name].Add(listViewFiles.Groups[i].Items[j].SubItems[1].Text);
+            foreach (ListViewItem item in listViewFiles.CheckedItems)
+            {
+                if (fileList.ContainsKey(item.Group.Name))
+                    fileList[item.Group.Name].Add(item.SubItems[1].Text);
+                else
+                    fileList.Add(item.Group.Name, new SortedSet<string>(StringComparer.OrdinalIgnoreCase) { item.SubItems[1].Text });
             }
-        return fileList;
+
+            return fileList;
         }
 
         public string SizeSuffix(Int64 value, int decimalPlaces = 1)
         {
             string[] SizeSuffixes = { "bytes", "KB", "MB", "GB", "TB" };
             if (decimalPlaces < 0) { throw new ArgumentOutOfRangeException("decimalPlaces"); }
-            if (value < 0) { return "-" + SizeSuffix(-value); }
-            if (value == 0) { return string.Format("{0:n" + decimalPlaces + "} bytes", 0); }
+            if (value == 0) { return "0 bytes"; }
             int mag = (int)Math.Log(value, 1024);
             decimal adjustedSize = (decimal)value / (1L << (mag * 10));
             if (Math.Round(adjustedSize, decimalPlaces) >= 1000)
@@ -270,7 +281,10 @@ namespace HPIZArchiver
 
         private async void compressCheckedFilesToolStripMenuItem_Click(object sender, EventArgs e)
         {
-            if (dialogSaveHpi.ShowDialog() == DialogResult.OK)
+            if (listViewFiles.CheckedItems.Count == 0)
+                MessageBox.Show("Can't Compress: No files have been checked in the list.");
+
+            else if (dialogSaveHpi.ShowDialog() == DialogResult.OK)
             {
                 SetMode(ArchiverMode.Busy);
 
@@ -280,7 +294,7 @@ namespace HPIZArchiver
                 int chunkTotal = 0;
                 foreach (ListViewItem item in listViewFiles.CheckedItems)
                     chunkTotal += FileEntry.CalculateChunkQuantity((int)item.SubItems[3].Tag);
-                
+
                 progressBar.Maximum = chunkTotal;
 
                 CompressionFlavor flavor;
@@ -304,6 +318,7 @@ namespace HPIZArchiver
 
                 firstStatusLabel.Text = String.Format("Done! Elapsed time: {0}h {1}m {2}s {3}ms", timer.Elapsed.Hours, timer.Elapsed.Minutes,
                 timer.Elapsed.Seconds, timer.Elapsed.Milliseconds);
+                progressBar.Value = progressBar.Maximum;
                 secondStatusLabel.Text = dialogSaveHpi.FileName;
                 TaskbarProgress.FlashWindow(this.Handle, true);
                 SetMode(ArchiverMode.Finish);
@@ -353,7 +368,10 @@ namespace HPIZArchiver
 
         private async void mergeRepackCheckedFilesToolStripMenuItem_Click(object sender, EventArgs e)
         {
-            if (dialogSaveHpi.ShowDialog() == DialogResult.OK)
+            if(listViewFiles.CheckedItems.Count == 0)
+                MessageBox.Show("Can't Merge/Repack: No files have been checked in the list.");
+
+            else if (dialogSaveHpi.ShowDialog() == DialogResult.OK)
             {
                 SetMode(ArchiverMode.Busy);
 
@@ -390,6 +408,65 @@ namespace HPIZArchiver
                 TaskbarProgress.FlashWindow(this.Handle, true);
                 SetMode(ArchiverMode.Finish);
             }
+        }
+
+        private void SetRule(DuplicateRules rule)
+        {
+            dRules = rule;
+            keepFirstToolStripMenuItem.Checked = rule == DuplicateRules.KeepFirst;
+            keepLastToolStripMenuItem.Checked = rule == DuplicateRules.KeepLast;
+            uncheckAllDuplicatesToolStripMenuItem.Checked = rule == DuplicateRules.NoDuplicates;
+
+            listViewFiles.BeginUpdate();
+
+            switch (rule)
+            {
+                case DuplicateRules.KeepFirst:
+                    foreach (var item in uniqueItens)
+                    {
+                        item.Value.First().Checked = true;
+                        for (int i = 1; i < item.Value.Count; i++)
+                            item.Value[i].Checked = false;
+                    }
+                    break;
+                case DuplicateRules.KeepLast:
+                    foreach (var item in uniqueItens)
+                    {
+                        item.Value.Last().Checked = true;
+                        for (int i = 0; i < item.Value.Count - 1; i++)
+                            item.Value[i].Checked = false;
+                    }
+                    break;
+                case DuplicateRules.NoDuplicates:
+                    foreach (var item in uniqueItens)
+                    {
+                        if(item.Value.Count == 1)
+                            item.Value.First().Checked = true;
+                        else
+                        for (int i = 0; i < item.Value.Count; i++)
+                            item.Value[i].Checked = false;
+                    }
+                    break;
+            }
+            listViewFiles.EndUpdate();
+        }
+
+        private void keepFirstToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            if (dRules != DuplicateRules.KeepFirst)
+                SetRule(DuplicateRules.KeepFirst);
+        }
+
+        private void keepLastToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            if (dRules != DuplicateRules.KeepLast)
+                SetRule(DuplicateRules.KeepLast);
+        }
+
+        private void uncheckAllDuplicatesToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            if (dRules != DuplicateRules.NoDuplicates)
+                SetRule(DuplicateRules.NoDuplicates);
         }
     }
 }

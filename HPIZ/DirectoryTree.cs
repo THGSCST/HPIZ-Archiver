@@ -29,7 +29,7 @@ namespace HPIZ
                 return;
             }
 
-            var endIndex = entry.IndexOf(defaultSeparator, startIndex, StringComparison.Ordinal);
+            var endIndex = entry.IndexOf(defaultSeparator, startIndex, StringComparison.OrdinalIgnoreCase);
             if (endIndex == -1)
             {
                 endIndex = entry.Length;
@@ -39,7 +39,7 @@ namespace HPIZ
             {
                 return;
             }
-            DirectoryNode item = this.FirstOrDefault(n => n.Key == key);
+            DirectoryNode item = this.FirstOrDefault(n => String.Equals(n.Key, key, StringComparison.OrdinalIgnoreCase));
             if (item == null)
             {
                 item = new DirectoryNode() { Key = key };

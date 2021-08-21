@@ -83,7 +83,7 @@ namespace HPIZ
 
         public static void Merge(PathCollection archivesFiles, string destinationArchiveFileName, CompressionFlavor flavor, IProgress<string> progress)
         {
-            var files = new SortedDictionary<string, FileEntry>();
+            var files = new SortedDictionary<string, FileEntry>(StringComparer.OrdinalIgnoreCase);
             foreach (var archiveFullPath in archivesFiles.Keys)
                 using (var archive = new HpiArchive(File.OpenRead(archiveFullPath)))
                     foreach (var shortFileName in archivesFiles[archiveFullPath])

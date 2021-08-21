@@ -58,6 +58,8 @@
             this.toolStripSeparator3 = new System.Windows.Forms.ToolStripSeparator();
             this.rulesStripButton = new System.Windows.Forms.ToolStripDropDownButton();
             this.keepFirstToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this.keepLastToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this.uncheckAllDuplicatesToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.toolStrip = new System.Windows.Forms.ToolStrip();
             this.listViewFiles = new HPIZArchiver.CollapsibleListView();
             this.columnChecked = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
@@ -78,11 +80,10 @@
             this.progressBar,
             this.firstStatusLabel,
             this.secondStatusLabel});
-            this.statusStrip.Location = new System.Drawing.Point(0, 447);
+            this.statusStrip.Location = new System.Drawing.Point(0, 467);
             this.statusStrip.Name = "statusStrip";
             this.statusStrip.Padding = new System.Windows.Forms.Padding(1, 0, 13, 0);
-            this.statusStrip.Size = new System.Drawing.Size(822, 26);
-            this.statusStrip.SizingGrip = false;
+            this.statusStrip.Size = new System.Drawing.Size(842, 26);
             this.statusStrip.TabIndex = 3;
             // 
             // progressBar
@@ -95,16 +96,18 @@
             // 
             // firstStatusLabel
             // 
+            this.firstStatusLabel.DisplayStyle = System.Windows.Forms.ToolStripItemDisplayStyle.Text;
             this.firstStatusLabel.Name = "firstStatusLabel";
             this.firstStatusLabel.Size = new System.Drawing.Size(152, 20);
             this.firstStatusLabel.Text = "No files or directories";
             // 
             // secondStatusLabel
             // 
+            this.secondStatusLabel.DisplayStyle = System.Windows.Forms.ToolStripItemDisplayStyle.Text;
+            this.secondStatusLabel.Margin = new System.Windows.Forms.Padding(0, 4, 4, 2);
             this.secondStatusLabel.Name = "secondStatusLabel";
-            this.secondStatusLabel.Size = new System.Drawing.Size(656, 20);
+            this.secondStatusLabel.Size = new System.Drawing.Size(672, 20);
             this.secondStatusLabel.Spring = true;
-            this.secondStatusLabel.Text = " ";
             this.secondStatusLabel.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
             // 
             // checkListContextMenu
@@ -147,8 +150,7 @@
             // 
             // dialogSaveHpi
             // 
-            this.dialogSaveHpi.Filter = "All TA Files|*.hpi;*.ccx;*.ufo;*.gp?|HPI Files|*.hpi|CCX Files|*.ccx|UFO Files|*." +
-    "ufo|GP Files|*.gp?|Any File|*.*";
+            this.dialogSaveHpi.Filter = "HPI Files|*.hpi|CCX Files|*.ccx|UFO Files|*.ufo|GP3 Files|*.gp3";
             this.dialogSaveHpi.SupportMultiDottedExtensions = true;
             // 
             // dialogOpenHpi
@@ -185,7 +187,7 @@
             this.openFilesToolStripMenuItem.Name = "openFilesToolStripMenuItem";
             this.openFilesToolStripMenuItem.Size = new System.Drawing.Size(249, 26);
             this.openFilesToolStripMenuItem.Text = "HPI File or Files...";
-            this.openFilesToolStripMenuItem.Click += new System.EventHandler(this.hPIFileToExtractToolStripMenuItem_Click);
+            this.openFilesToolStripMenuItem.Click += new System.EventHandler(this.openFilesStripMenuItem_Click);
             // 
             // openDirToolStripMenuItem
             // 
@@ -241,7 +243,7 @@
             this.toolStripCompressButton.Size = new System.Drawing.Size(88, 56);
             this.toolStripCompressButton.Text = "Compress";
             this.toolStripCompressButton.TextImageRelation = System.Windows.Forms.TextImageRelation.ImageAboveText;
-            this.toolStripCompressButton.ToolTipText = "Compress checked files";
+            this.toolStripCompressButton.ToolTipText = "Compress or Merge";
             // 
             // compressCheckedFilesToolStripMenuItem
             // 
@@ -284,7 +286,9 @@
             // rulesStripButton
             // 
             this.rulesStripButton.DropDownItems.AddRange(new System.Windows.Forms.ToolStripItem[] {
-            this.keepFirstToolStripMenuItem});
+            this.keepFirstToolStripMenuItem,
+            this.keepLastToolStripMenuItem,
+            this.uncheckAllDuplicatesToolStripMenuItem});
             this.rulesStripButton.Enabled = false;
             this.rulesStripButton.Image = global::HPIZArchiver.Properties.Resources.Rules_32x;
             this.rulesStripButton.ImageScaling = System.Windows.Forms.ToolStripItemImageScaling.None;
@@ -299,9 +303,24 @@
             this.keepFirstToolStripMenuItem.Checked = true;
             this.keepFirstToolStripMenuItem.CheckState = System.Windows.Forms.CheckState.Checked;
             this.keepFirstToolStripMenuItem.Name = "keepFirstToolStripMenuItem";
-            this.keepFirstToolStripMenuItem.Size = new System.Drawing.Size(157, 26);
+            this.keepFirstToolStripMenuItem.Size = new System.Drawing.Size(243, 26);
             this.keepFirstToolStripMenuItem.Text = "Keep First";
             this.keepFirstToolStripMenuItem.ToolTipText = "Uncheck all duplicates except the first one";
+            this.keepFirstToolStripMenuItem.Click += new System.EventHandler(this.keepFirstToolStripMenuItem_Click);
+            // 
+            // keepLastToolStripMenuItem
+            // 
+            this.keepLastToolStripMenuItem.Name = "keepLastToolStripMenuItem";
+            this.keepLastToolStripMenuItem.Size = new System.Drawing.Size(243, 26);
+            this.keepLastToolStripMenuItem.Text = "Keep Last";
+            this.keepLastToolStripMenuItem.Click += new System.EventHandler(this.keepLastToolStripMenuItem_Click);
+            // 
+            // uncheckAllDuplicatesToolStripMenuItem
+            // 
+            this.uncheckAllDuplicatesToolStripMenuItem.Name = "uncheckAllDuplicatesToolStripMenuItem";
+            this.uncheckAllDuplicatesToolStripMenuItem.Size = new System.Drawing.Size(243, 26);
+            this.uncheckAllDuplicatesToolStripMenuItem.Text = "Uncheck All Duplicates";
+            this.uncheckAllDuplicatesToolStripMenuItem.Click += new System.EventHandler(this.uncheckAllDuplicatesToolStripMenuItem_Click);
             // 
             // toolStrip
             // 
@@ -317,7 +336,7 @@
             this.rulesStripButton});
             this.toolStrip.Location = new System.Drawing.Point(0, 0);
             this.toolStrip.Name = "toolStrip";
-            this.toolStrip.Size = new System.Drawing.Size(822, 59);
+            this.toolStrip.Size = new System.Drawing.Size(842, 59);
             this.toolStrip.TabIndex = 2;
             // 
             // listViewFiles
@@ -340,8 +359,9 @@
             this.listViewFiles.HoverSelection = true;
             this.listViewFiles.Location = new System.Drawing.Point(0, 59);
             this.listViewFiles.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
+            this.listViewFiles.MultiSelect = false;
             this.listViewFiles.Name = "listViewFiles";
-            this.listViewFiles.Size = new System.Drawing.Size(822, 388);
+            this.listViewFiles.Size = new System.Drawing.Size(842, 408);
             this.listViewFiles.TabIndex = 4;
             this.listViewFiles.Tag = "A";
             this.listViewFiles.UseCompatibleStateImageBehavior = false;
@@ -386,11 +406,10 @@
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(8F, 16F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(822, 473);
+            this.ClientSize = new System.Drawing.Size(842, 493);
             this.Controls.Add(this.listViewFiles);
             this.Controls.Add(this.statusStrip);
             this.Controls.Add(this.toolStrip);
-            this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedSingle;
             this.Icon = ((System.Drawing.Icon)(resources.GetObject("$this.Icon")));
             this.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
             this.Name = "MainForm";
@@ -443,6 +462,8 @@
         private System.Windows.Forms.ToolStripDropDownButton rulesStripButton;
         private System.Windows.Forms.ToolStripMenuItem keepFirstToolStripMenuItem;
         private System.Windows.Forms.ToolStrip toolStrip;
+        private System.Windows.Forms.ToolStripMenuItem keepLastToolStripMenuItem;
+        private System.Windows.Forms.ToolStripMenuItem uncheckAllDuplicatesToolStripMenuItem;
     }
 }
 

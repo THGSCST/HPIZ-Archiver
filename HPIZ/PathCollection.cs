@@ -9,6 +9,6 @@ namespace HPIZ
 {
     public class PathCollection : SortedList<string, SortedSet<string>>
     {
- 
+        public PathCollection() : base(StringComparer.OrdinalIgnoreCase) {}
     }
 }
