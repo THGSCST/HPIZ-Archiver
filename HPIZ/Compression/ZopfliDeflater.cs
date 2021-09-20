@@ -943,7 +943,7 @@ namespace CompressSharper.Zopfli
 
                 /* End symbol. */
 
-                writer.WriteHuffman(ll_symbols[256], (int)ll_lengths[256]);
+                writer.WriteHuffman(ll_symbols[256], ll_lengths[256]);
             }
 
             #endregion WriteBlock
@@ -964,7 +964,7 @@ namespace CompressSharper.Zopfli
 
                     if (dist == 0)
                     {
-                        writer.WriteHuffman(ll_symbols[litlen], (int)ll_lengths[litlen]);
+                        writer.WriteHuffman(ll_symbols[litlen], ll_lengths[litlen]);
                     }
                     else
                     {
@@ -972,11 +972,11 @@ namespace CompressSharper.Zopfli
                         int ds = GetDistSymbol(dist);
                        
 
-                        writer.WriteHuffman(ll_symbols[lls], (int)ll_lengths[lls]);
+                        writer.WriteHuffman(ll_symbols[lls], ll_lengths[lls]);
 
                         writer.Write(_lengthExtraBitsValueTable[litlen], _lengthExtraBitsTable[litlen]);
 
-                        writer.WriteHuffman(d_symbols[ds], (int)d_lengths[ds]);
+                        writer.WriteHuffman(d_symbols[ds], d_lengths[ds]);
 
                         writer.Write(GetDistExtraBitsValue(dist), GetDistExtraBits(dist));
 
@@ -1128,7 +1128,7 @@ namespace CompressSharper.Zopfli
                     int symbol = clsymbols[rle[i]];
 
                     if (writeOutput)
-                        writer.WriteHuffman(symbol, (int)clcl[rle[i]]);
+                        writer.WriteHuffman(symbol, clcl[rle[i]]);
 
                     bitSize += clcl[rle[i]];
 
@@ -1143,14 +1143,14 @@ namespace CompressSharper.Zopfli
                     else if (rle[i] == 17)
                     {
                         if (writeOutput)
-                            writer.Write((int)rle_bits[i], 3);
+                            writer.Write(rle_bits[i], 3);
 
                         bitSize += 3;
                     }
                     else if (rle[i] == 18)
                     {
                         if (writeOutput)
-                            writer.Write((int)rle_bits[i], 7);
+                            writer.Write(rle_bits[i], 7);
 
                         bitSize += 7;
                     }
