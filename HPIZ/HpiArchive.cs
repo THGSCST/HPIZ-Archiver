@@ -67,7 +67,6 @@ namespace HPIZ
 
             archiveReader = new BinaryReader(archiveStream);
 
-
             foreach (var entry in entriesDictionary.Keys)
             {
                 if (entriesDictionary[entry].FlagCompression != CompressionMethod.None)
@@ -84,8 +83,6 @@ namespace HPIZ
 
                     entriesDictionary[entry].compressedChunkSizes = size;
                 }
-                else
-                    entriesDictionary[entry].compressedChunkSizes = new int[] { entriesDictionary[entry].UncompressedSize}; //To optimize
             }
         }
 
@@ -96,52 +93,51 @@ namespace HPIZ
                 reader.BaseStream.Position = EntryListOffset + (i * 9);
 
                 int nameOffset = reader.ReadInt32();
-                int dataOffset = reader.ReadInt32(); //Unused?
+                int dataOffset = reader.ReadInt32();
                 bool IsDirectory = reader.ReadBoolean();
                 reader.BaseStream.Position = nameOffset;
                 var fullPath = Path.Combine(parentPath, ReadStringCP437NullTerminated(reader));
+                reader.BaseStream.Position = dataOffset;
 
                 if (IsDirectory)
                     GetEntries(reader.ReadInt32(), reader.ReadInt32(), reader, fullPath);
                 else
-                {
-                    FileEntry fd = new FileEntry(reader, this);
-                    entriesDictionary.Add(fullPath, fd);
-                }
+                    entriesDictionary.Add(fullPath, new FileEntry(reader, this));
             }
         }
 
-        internal static void SetEntries(DirectoryTree tree, BinaryWriter bw, IEnumerator<FileEntry> sequence)
+        internal static void SetEntries(DirectoryNode node, BinaryWriter bw, IEnumerator<FileEntry> sequence)
         {
-            bw.Write(tree.Count); //Root Entries number in directory
-           
+            bw.Write(node.Children.Count); //Root Entries number in directory
             bw.Write((int)bw.BaseStream.Position + 4); //Entries Offset point to next
 
-            for (int i = 0; i < tree.Count; ++i)
+            bool first = true;
+            foreach (var item in node.Children)
             {
-                int posString;
-                if (i == 0)
-                    posString = (int)bw.BaseStream.Position + (tree.Count - i) * 9;
-                else
-                    posString = (int)bw.BaseStream.Length; 
+                int posString = (int)bw.BaseStream.Length;
+                if (first)
+                {
+                    first = false;
+                    posString = (int)bw.BaseStream.Position + node.Children.Count * 9;
+                }
                 bw.Write(posString); //NameOffset;      /* points to the file name */
-                int posNext = posString + tree[i].Key.Length + 1;
-                bw.Write(posNext); //DirDataOffset;   /* points to directory data */
-                bool isDir = tree[i].Children.Count != 0;
-                bw.Write(isDir); 
+                int posNext = posString + item.Key.Length + 1;
+                bw.Write(posNext); //DataOffset;   /* points to directory data */
+                bool isDir = item.Value.Children.Count != 0;
+                bw.Write(isDir);
 
                 int previousPos = (int)bw.BaseStream.Position;
                 bw.BaseStream.Position = posString;
-                WriteStringCP437NullTerminated(bw, tree[i].Key);
+                WriteStringCP437NullTerminated(bw, item.Key);
                 if (isDir)
-                    SetEntries(tree[i].Children, bw, sequence);
+                    SetEntries(item.Value, bw, sequence);
                 else
                 {
                     sequence.MoveNext();
                     bw.Write(sequence.Current.OffsetOfCompressedData); //OffsetOfData
                     bw.Write(sequence.Current.UncompressedSize); //UncompressedSize 
                     bw.Write((byte)sequence.Current.FlagCompression); //FlagCompression 
-                    
+
                 }
                 bw.BaseStream.Position = previousPos;
             }

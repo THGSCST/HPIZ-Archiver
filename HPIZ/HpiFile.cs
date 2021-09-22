@@ -101,7 +101,7 @@ namespace HPIZ
 
         private static void WriteToFile(string destinationArchiveFileName, SortedDictionary<string, FileEntry> entries)
         {
-            var tree = new DirectoryTree();
+            var tree = new DirectoryNode();
             foreach (var fileName in entries.Keys)
                 tree.AddEntry(fileName);
             int chunkStartPosition = tree.CalculateSize() + HpiArchive.HeaderSize;

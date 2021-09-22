@@ -15,7 +15,7 @@
     <Compile Include="$(MSBuildThisFileDirectory)Compression\Strategy.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Compression\ZLibDeflater.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Compression\LZ77.cs" />
-    <Compile Include="$(MSBuildThisFileDirectory)DirectoryTree.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)DirectoryNode.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)FileEntry.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)HpiArchive.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)HpiFile.cs" />
