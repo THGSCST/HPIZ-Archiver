@@ -89,6 +89,7 @@
     <Compile Include="CollapsibleListView.cs">
       <SubType>Component</SubType>
     </Compile>
+    <Compile Include="FolderExtension.cs" />
     <Compile Include="ListViewItemComparer.cs" />
     <Compile Include="MainForm.cs">
       <SubType>Form</SubType>
@@ -99,6 +100,7 @@
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="TaskbarProgress.cs" />
+    <Compile Include="Utils.cs" />
     <EmbeddedResource Include="MainForm.resx">
       <DependentUpon>MainForm.cs</DependentUpon>
     </EmbeddedResource>
@@ -146,6 +148,9 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="Resources\Rules_32x.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\Highlighter_32x.png" />
   </ItemGroup>
   <Import Project="..\HPIZ\HPIZ.projitems" Label="Shared" />
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />

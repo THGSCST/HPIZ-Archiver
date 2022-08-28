@@ -14,5 +14,6 @@ namespace HPIZ
 
         //Size in bytes where Zopfli compression starts to get better results than ZLib Deflate.
         internal const int ZopfliBreakEven = 1024;
+
     }
 }

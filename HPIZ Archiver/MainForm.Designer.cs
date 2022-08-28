@@ -38,6 +38,15 @@
             this.selectAllToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.unselectAllToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.invertSelectedToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this.toolStripSeparator2 = new System.Windows.Forms.ToolStripSeparator();
+            this.fullNameToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this.extensionToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this.sizeToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this.compressionToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this.ratioToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this.methodToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this.offsetToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this.sha256ToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.dialogOpenFolder = new System.Windows.Forms.FolderBrowserDialog();
             this.dialogSaveHpi = new System.Windows.Forms.SaveFileDialog();
             this.dialogOpenHpi = new System.Windows.Forms.OpenFileDialog();
@@ -56,11 +65,18 @@
             this.flavorLevelComboBox = new System.Windows.Forms.ToolStripComboBox();
             this.flavorStripLabel = new System.Windows.Forms.ToolStripLabel();
             this.toolStripSeparator3 = new System.Windows.Forms.ToolStripSeparator();
-            this.rulesStripButton = new System.Windows.Forms.ToolStripDropDownButton();
-            this.keepFirstToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
-            this.keepLastToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
-            this.uncheckAllDuplicatesToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this.manageDuplicateNamesStripButton = new System.Windows.Forms.ToolStripDropDownButton();
+            this.keepFirstNameToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this.keepLastNameToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this.uncheckAllDuplicateNamesToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.toolStrip = new System.Windows.Forms.ToolStrip();
+            this.HighlightsToolStripDropDownButton = new System.Windows.Forms.ToolStripDropDownButton();
+            this.unknowFoldersExtensionToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this.toolStripSeparator6 = new System.Windows.Forms.ToolStripSeparator();
+            this.duplicateNamesinYellowStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this.duplicateContentsToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this.duplicateNameContentToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this.toolStripSeparator5 = new System.Windows.Forms.ToolStripSeparator();
             this.listViewFiles = new HPIZArchiver.CollapsibleListView();
             this.columnChecked = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
             this.columnFullName = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
@@ -68,6 +84,9 @@
             this.columnSize = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
             this.columnCompressed = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
             this.columnRatio = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
+            this.columnMethod = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
+            this.columnOffset = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
+            this.columnSha256 = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
             this.statusStrip.SuspendLayout();
             this.checkListContextMenu.SuspendLayout();
             this.toolStrip.SuspendLayout();
@@ -80,10 +99,10 @@
             this.progressBar,
             this.firstStatusLabel,
             this.secondStatusLabel});
-            this.statusStrip.Location = new System.Drawing.Point(0, 467);
+            this.statusStrip.Location = new System.Drawing.Point(0, 522);
             this.statusStrip.Name = "statusStrip";
             this.statusStrip.Padding = new System.Windows.Forms.Padding(1, 0, 13, 0);
-            this.statusStrip.Size = new System.Drawing.Size(842, 26);
+            this.statusStrip.Size = new System.Drawing.Size(942, 26);
             this.statusStrip.TabIndex = 3;
             // 
             // progressBar
@@ -106,7 +125,7 @@
             this.secondStatusLabel.DisplayStyle = System.Windows.Forms.ToolStripItemDisplayStyle.Text;
             this.secondStatusLabel.Margin = new System.Windows.Forms.Padding(0, 4, 4, 2);
             this.secondStatusLabel.Name = "secondStatusLabel";
-            this.secondStatusLabel.Size = new System.Drawing.Size(511, 20);
+            this.secondStatusLabel.Size = new System.Drawing.Size(772, 20);
             this.secondStatusLabel.Spring = true;
             this.secondStatusLabel.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
             this.secondStatusLabel.Click += new System.EventHandler(this.secondStatusLabel_Click);
@@ -117,31 +136,120 @@
             this.checkListContextMenu.Items.AddRange(new System.Windows.Forms.ToolStripItem[] {
             this.selectAllToolStripMenuItem,
             this.unselectAllToolStripMenuItem,
-            this.invertSelectedToolStripMenuItem});
+            this.invertSelectedToolStripMenuItem,
+            this.toolStripSeparator2,
+            this.fullNameToolStripMenuItem,
+            this.extensionToolStripMenuItem,
+            this.sizeToolStripMenuItem,
+            this.compressionToolStripMenuItem,
+            this.ratioToolStripMenuItem,
+            this.methodToolStripMenuItem,
+            this.offsetToolStripMenuItem,
+            this.sha256ToolStripMenuItem});
             this.checkListContextMenu.Name = "checkListContextMenu";
-            this.checkListContextMenu.Size = new System.Drawing.Size(192, 76);
+            this.checkListContextMenu.Size = new System.Drawing.Size(192, 296);
             // 
             // selectAllToolStripMenuItem
             // 
             this.selectAllToolStripMenuItem.Name = "selectAllToolStripMenuItem";
             this.selectAllToolStripMenuItem.ShortcutKeys = ((System.Windows.Forms.Keys)((System.Windows.Forms.Keys.Control | System.Windows.Forms.Keys.A)));
-            this.selectAllToolStripMenuItem.Size = new System.Drawing.Size(191, 24);
+            this.selectAllToolStripMenuItem.Size = new System.Drawing.Size(191, 26);
             this.selectAllToolStripMenuItem.Text = "Check All";
             this.selectAllToolStripMenuItem.Click += new System.EventHandler(this.selectAllToolStripMenuItem_Click);
             // 
             // unselectAllToolStripMenuItem
             // 
             this.unselectAllToolStripMenuItem.Name = "unselectAllToolStripMenuItem";
-            this.unselectAllToolStripMenuItem.Size = new System.Drawing.Size(191, 24);
+            this.unselectAllToolStripMenuItem.Size = new System.Drawing.Size(191, 26);
             this.unselectAllToolStripMenuItem.Text = "Uncheck All";
             this.unselectAllToolStripMenuItem.Click += new System.EventHandler(this.unselectAllToolStripMenuItem_Click);
             // 
             // invertSelectedToolStripMenuItem
             // 
             this.invertSelectedToolStripMenuItem.Name = "invertSelectedToolStripMenuItem";
-            this.invertSelectedToolStripMenuItem.Size = new System.Drawing.Size(191, 24);
+            this.invertSelectedToolStripMenuItem.Size = new System.Drawing.Size(191, 26);
             this.invertSelectedToolStripMenuItem.Text = "Invert Checked";
             this.invertSelectedToolStripMenuItem.Click += new System.EventHandler(this.invertSelectedToolStripMenuItem_Click);
+            // 
+            // toolStripSeparator2
+            // 
+            this.toolStripSeparator2.Name = "toolStripSeparator2";
+            this.toolStripSeparator2.Size = new System.Drawing.Size(188, 6);
+            // 
+            // fullNameToolStripMenuItem
+            // 
+            this.fullNameToolStripMenuItem.Checked = true;
+            this.fullNameToolStripMenuItem.CheckOnClick = true;
+            this.fullNameToolStripMenuItem.CheckState = System.Windows.Forms.CheckState.Checked;
+            this.fullNameToolStripMenuItem.Enabled = false;
+            this.fullNameToolStripMenuItem.Name = "fullNameToolStripMenuItem";
+            this.fullNameToolStripMenuItem.Size = new System.Drawing.Size(191, 26);
+            this.fullNameToolStripMenuItem.Text = "Full Name";
+            this.fullNameToolStripMenuItem.CheckedChanged += new System.EventHandler(this.showHideToolStripMenuItem_CheckedChanged);
+            // 
+            // extensionToolStripMenuItem
+            // 
+            this.extensionToolStripMenuItem.Checked = true;
+            this.extensionToolStripMenuItem.CheckOnClick = true;
+            this.extensionToolStripMenuItem.CheckState = System.Windows.Forms.CheckState.Checked;
+            this.extensionToolStripMenuItem.Name = "extensionToolStripMenuItem";
+            this.extensionToolStripMenuItem.Size = new System.Drawing.Size(191, 26);
+            this.extensionToolStripMenuItem.Text = "Extension";
+            this.extensionToolStripMenuItem.CheckedChanged += new System.EventHandler(this.showHideToolStripMenuItem_CheckedChanged);
+            // 
+            // sizeToolStripMenuItem
+            // 
+            this.sizeToolStripMenuItem.Checked = true;
+            this.sizeToolStripMenuItem.CheckOnClick = true;
+            this.sizeToolStripMenuItem.CheckState = System.Windows.Forms.CheckState.Checked;
+            this.sizeToolStripMenuItem.Name = "sizeToolStripMenuItem";
+            this.sizeToolStripMenuItem.Size = new System.Drawing.Size(191, 26);
+            this.sizeToolStripMenuItem.Text = "Size";
+            this.sizeToolStripMenuItem.CheckedChanged += new System.EventHandler(this.showHideToolStripMenuItem_CheckedChanged);
+            // 
+            // compressionToolStripMenuItem
+            // 
+            this.compressionToolStripMenuItem.Checked = true;
+            this.compressionToolStripMenuItem.CheckOnClick = true;
+            this.compressionToolStripMenuItem.CheckState = System.Windows.Forms.CheckState.Checked;
+            this.compressionToolStripMenuItem.Name = "compressionToolStripMenuItem";
+            this.compressionToolStripMenuItem.Size = new System.Drawing.Size(191, 26);
+            this.compressionToolStripMenuItem.Text = "Compression";
+            this.compressionToolStripMenuItem.CheckedChanged += new System.EventHandler(this.showHideToolStripMenuItem_CheckedChanged);
+            // 
+            // ratioToolStripMenuItem
+            // 
+            this.ratioToolStripMenuItem.Checked = true;
+            this.ratioToolStripMenuItem.CheckOnClick = true;
+            this.ratioToolStripMenuItem.CheckState = System.Windows.Forms.CheckState.Checked;
+            this.ratioToolStripMenuItem.Name = "ratioToolStripMenuItem";
+            this.ratioToolStripMenuItem.Size = new System.Drawing.Size(191, 26);
+            this.ratioToolStripMenuItem.Text = "Ratio";
+            this.ratioToolStripMenuItem.CheckedChanged += new System.EventHandler(this.showHideToolStripMenuItem_CheckedChanged);
+            // 
+            // methodToolStripMenuItem
+            // 
+            this.methodToolStripMenuItem.CheckOnClick = true;
+            this.methodToolStripMenuItem.Name = "methodToolStripMenuItem";
+            this.methodToolStripMenuItem.Size = new System.Drawing.Size(191, 26);
+            this.methodToolStripMenuItem.Text = "Method";
+            this.methodToolStripMenuItem.CheckedChanged += new System.EventHandler(this.showHideToolStripMenuItem_CheckedChanged);
+            // 
+            // offsetToolStripMenuItem
+            // 
+            this.offsetToolStripMenuItem.CheckOnClick = true;
+            this.offsetToolStripMenuItem.Name = "offsetToolStripMenuItem";
+            this.offsetToolStripMenuItem.Size = new System.Drawing.Size(191, 26);
+            this.offsetToolStripMenuItem.Text = "Offset";
+            this.offsetToolStripMenuItem.CheckedChanged += new System.EventHandler(this.showHideToolStripMenuItem_CheckedChanged);
+            // 
+            // sha256ToolStripMenuItem
+            // 
+            this.sha256ToolStripMenuItem.CheckOnClick = true;
+            this.sha256ToolStripMenuItem.Name = "sha256ToolStripMenuItem";
+            this.sha256ToolStripMenuItem.Size = new System.Drawing.Size(191, 26);
+            this.sha256ToolStripMenuItem.Text = "SHA-256";
+            this.sha256ToolStripMenuItem.CheckedChanged += new System.EventHandler(this.showHideToolStripMenuItem_CheckedChanged);
             // 
             // dialogOpenFolder
             // 
@@ -268,7 +376,7 @@
             this.flavorLevelComboBox.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
             this.flavorLevelComboBox.Enabled = false;
             this.flavorLevelComboBox.Name = "flavorLevelComboBox";
-            this.flavorLevelComboBox.Size = new System.Drawing.Size(180, 59);
+            this.flavorLevelComboBox.Size = new System.Drawing.Size(162, 59);
             this.flavorLevelComboBox.ToolTipText = "Select compression flavor or level. Defaul is i15 Zopfli Deflate.";
             // 
             // flavorStripLabel
@@ -284,44 +392,48 @@
             this.toolStripSeparator3.Name = "toolStripSeparator3";
             this.toolStripSeparator3.Size = new System.Drawing.Size(6, 59);
             // 
-            // rulesStripButton
+            // manageDuplicateNamesStripButton
             // 
-            this.rulesStripButton.DropDownItems.AddRange(new System.Windows.Forms.ToolStripItem[] {
-            this.keepFirstToolStripMenuItem,
-            this.keepLastToolStripMenuItem,
-            this.uncheckAllDuplicatesToolStripMenuItem});
-            this.rulesStripButton.Enabled = false;
-            this.rulesStripButton.Image = global::HPIZArchiver.Properties.Resources.Rules_32x;
-            this.rulesStripButton.ImageScaling = System.Windows.Forms.ToolStripItemImageScaling.None;
-            this.rulesStripButton.ImageTransparentColor = System.Drawing.Color.Magenta;
-            this.rulesStripButton.Name = "rulesStripButton";
-            this.rulesStripButton.Size = new System.Drawing.Size(126, 56);
-            this.rulesStripButton.Text = "Duplicate Rules";
-            this.rulesStripButton.TextImageRelation = System.Windows.Forms.TextImageRelation.ImageAboveText;
+            this.manageDuplicateNamesStripButton.DropDownItems.AddRange(new System.Windows.Forms.ToolStripItem[] {
+            this.keepFirstNameToolStripMenuItem,
+            this.keepLastNameToolStripMenuItem,
+            this.uncheckAllDuplicateNamesToolStripMenuItem});
+            this.manageDuplicateNamesStripButton.Enabled = false;
+            this.manageDuplicateNamesStripButton.Image = global::HPIZArchiver.Properties.Resources.Rules_32x;
+            this.manageDuplicateNamesStripButton.ImageScaling = System.Windows.Forms.ToolStripItemImageScaling.None;
+            this.manageDuplicateNamesStripButton.ImageTransparentColor = System.Drawing.Color.Magenta;
+            this.manageDuplicateNamesStripButton.Name = "manageDuplicateNamesStripButton";
+            this.manageDuplicateNamesStripButton.Size = new System.Drawing.Size(151, 56);
+            this.manageDuplicateNamesStripButton.Text = "Manage Duplicates";
+            this.manageDuplicateNamesStripButton.TextImageRelation = System.Windows.Forms.TextImageRelation.ImageAboveText;
+            this.manageDuplicateNamesStripButton.ToolTipText = "This menu is enabled if there are two or more files with the same name.";
             // 
-            // keepFirstToolStripMenuItem
+            // keepFirstNameToolStripMenuItem
             // 
-            this.keepFirstToolStripMenuItem.Checked = true;
-            this.keepFirstToolStripMenuItem.CheckState = System.Windows.Forms.CheckState.Checked;
-            this.keepFirstToolStripMenuItem.Name = "keepFirstToolStripMenuItem";
-            this.keepFirstToolStripMenuItem.Size = new System.Drawing.Size(243, 26);
-            this.keepFirstToolStripMenuItem.Text = "Keep First";
-            this.keepFirstToolStripMenuItem.ToolTipText = "Uncheck all duplicates except the first one";
-            this.keepFirstToolStripMenuItem.Click += new System.EventHandler(this.keepFirstToolStripMenuItem_Click);
+            this.keepFirstNameToolStripMenuItem.Checked = true;
+            this.keepFirstNameToolStripMenuItem.CheckState = System.Windows.Forms.CheckState.Checked;
+            this.keepFirstNameToolStripMenuItem.Name = "keepFirstNameToolStripMenuItem";
+            this.keepFirstNameToolStripMenuItem.ShowShortcutKeys = false;
+            this.keepFirstNameToolStripMenuItem.Size = new System.Drawing.Size(278, 26);
+            this.keepFirstNameToolStripMenuItem.Text = "Keep First Name";
+            this.keepFirstNameToolStripMenuItem.ToolTipText = "Uncheck all duplicates except the first one";
+            this.keepFirstNameToolStripMenuItem.Click += new System.EventHandler(this.keepFirstToolStripMenuItem_Click);
             // 
-            // keepLastToolStripMenuItem
+            // keepLastNameToolStripMenuItem
             // 
-            this.keepLastToolStripMenuItem.Name = "keepLastToolStripMenuItem";
-            this.keepLastToolStripMenuItem.Size = new System.Drawing.Size(243, 26);
-            this.keepLastToolStripMenuItem.Text = "Keep Last";
-            this.keepLastToolStripMenuItem.Click += new System.EventHandler(this.keepLastToolStripMenuItem_Click);
+            this.keepLastNameToolStripMenuItem.Name = "keepLastNameToolStripMenuItem";
+            this.keepLastNameToolStripMenuItem.ShowShortcutKeys = false;
+            this.keepLastNameToolStripMenuItem.Size = new System.Drawing.Size(278, 26);
+            this.keepLastNameToolStripMenuItem.Text = "Keep Last Name";
+            this.keepLastNameToolStripMenuItem.Click += new System.EventHandler(this.keepLastToolStripMenuItem_Click);
             // 
-            // uncheckAllDuplicatesToolStripMenuItem
+            // uncheckAllDuplicateNamesToolStripMenuItem
             // 
-            this.uncheckAllDuplicatesToolStripMenuItem.Name = "uncheckAllDuplicatesToolStripMenuItem";
-            this.uncheckAllDuplicatesToolStripMenuItem.Size = new System.Drawing.Size(243, 26);
-            this.uncheckAllDuplicatesToolStripMenuItem.Text = "Uncheck All Duplicates";
-            this.uncheckAllDuplicatesToolStripMenuItem.Click += new System.EventHandler(this.uncheckAllDuplicatesToolStripMenuItem_Click);
+            this.uncheckAllDuplicateNamesToolStripMenuItem.Name = "uncheckAllDuplicateNamesToolStripMenuItem";
+            this.uncheckAllDuplicateNamesToolStripMenuItem.ShowShortcutKeys = false;
+            this.uncheckAllDuplicateNamesToolStripMenuItem.Size = new System.Drawing.Size(278, 26);
+            this.uncheckAllDuplicateNamesToolStripMenuItem.Text = "Uncheck All Duplicate Names";
+            this.uncheckAllDuplicateNamesToolStripMenuItem.Click += new System.EventHandler(this.uncheckAllDuplicatesToolStripMenuItem_Click);
             // 
             // toolStrip
             // 
@@ -334,11 +446,87 @@
             this.flavorLevelComboBox,
             this.flavorStripLabel,
             this.toolStripSeparator3,
-            this.rulesStripButton});
+            this.HighlightsToolStripDropDownButton,
+            this.toolStripSeparator5,
+            this.manageDuplicateNamesStripButton});
             this.toolStrip.Location = new System.Drawing.Point(0, 0);
             this.toolStrip.Name = "toolStrip";
-            this.toolStrip.Size = new System.Drawing.Size(842, 59);
+            this.toolStrip.Size = new System.Drawing.Size(942, 59);
             this.toolStrip.TabIndex = 2;
+            // 
+            // HighlightsToolStripDropDownButton
+            // 
+            this.HighlightsToolStripDropDownButton.DropDownItems.AddRange(new System.Windows.Forms.ToolStripItem[] {
+            this.unknowFoldersExtensionToolStripMenuItem,
+            this.toolStripSeparator6,
+            this.duplicateNamesinYellowStripMenuItem,
+            this.duplicateContentsToolStripMenuItem,
+            this.duplicateNameContentToolStripMenuItem});
+            this.HighlightsToolStripDropDownButton.Image = global::HPIZArchiver.Properties.Resources.Highlighter_32x;
+            this.HighlightsToolStripDropDownButton.ImageScaling = System.Windows.Forms.ToolStripItemImageScaling.None;
+            this.HighlightsToolStripDropDownButton.ImageTransparentColor = System.Drawing.Color.Magenta;
+            this.HighlightsToolStripDropDownButton.Name = "HighlightsToolStripDropDownButton";
+            this.HighlightsToolStripDropDownButton.Size = new System.Drawing.Size(91, 56);
+            this.HighlightsToolStripDropDownButton.Text = "Highlights";
+            this.HighlightsToolStripDropDownButton.TextImageRelation = System.Windows.Forms.TextImageRelation.ImageAboveText;
+            // 
+            // unknowFoldersExtensionToolStripMenuItem
+            // 
+            this.unknowFoldersExtensionToolStripMenuItem.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(255)))), ((int)(((byte)(192)))), ((int)(((byte)(192)))));
+            this.unknowFoldersExtensionToolStripMenuItem.Checked = true;
+            this.unknowFoldersExtensionToolStripMenuItem.CheckOnClick = true;
+            this.unknowFoldersExtensionToolStripMenuItem.CheckState = System.Windows.Forms.CheckState.Checked;
+            this.unknowFoldersExtensionToolStripMenuItem.Name = "unknowFoldersExtensionToolStripMenuItem";
+            this.unknowFoldersExtensionToolStripMenuItem.ShowShortcutKeys = false;
+            this.unknowFoldersExtensionToolStripMenuItem.Size = new System.Drawing.Size(325, 26);
+            this.unknowFoldersExtensionToolStripMenuItem.Text = "Unknow Folders or Extensions in Red";
+            this.unknowFoldersExtensionToolStripMenuItem.CheckedChanged += new System.EventHandler(this.changeHighLightsToolStripMenuItem_Click);
+            // 
+            // toolStripSeparator6
+            // 
+            this.toolStripSeparator6.Name = "toolStripSeparator6";
+            this.toolStripSeparator6.Size = new System.Drawing.Size(322, 6);
+            // 
+            // duplicateNamesinYellowStripMenuItem
+            // 
+            this.duplicateNamesinYellowStripMenuItem.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(255)))), ((int)(((byte)(255)))), ((int)(((byte)(192)))));
+            this.duplicateNamesinYellowStripMenuItem.Checked = true;
+            this.duplicateNamesinYellowStripMenuItem.CheckOnClick = true;
+            this.duplicateNamesinYellowStripMenuItem.CheckState = System.Windows.Forms.CheckState.Checked;
+            this.duplicateNamesinYellowStripMenuItem.Name = "duplicateNamesinYellowStripMenuItem";
+            this.duplicateNamesinYellowStripMenuItem.ShowShortcutKeys = false;
+            this.duplicateNamesinYellowStripMenuItem.Size = new System.Drawing.Size(325, 26);
+            this.duplicateNamesinYellowStripMenuItem.Text = "Duplicate Names in Yellow";
+            this.duplicateNamesinYellowStripMenuItem.CheckedChanged += new System.EventHandler(this.changeHighLightsToolStripMenuItem_Click);
+            // 
+            // duplicateContentsToolStripMenuItem
+            // 
+            this.duplicateContentsToolStripMenuItem.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(192)))), ((int)(((byte)(255)))), ((int)(((byte)(255)))));
+            this.duplicateContentsToolStripMenuItem.Checked = true;
+            this.duplicateContentsToolStripMenuItem.CheckOnClick = true;
+            this.duplicateContentsToolStripMenuItem.CheckState = System.Windows.Forms.CheckState.Checked;
+            this.duplicateContentsToolStripMenuItem.Name = "duplicateContentsToolStripMenuItem";
+            this.duplicateContentsToolStripMenuItem.ShowShortcutKeys = false;
+            this.duplicateContentsToolStripMenuItem.Size = new System.Drawing.Size(325, 26);
+            this.duplicateContentsToolStripMenuItem.Text = "Duplicate Contents in Blue";
+            this.duplicateContentsToolStripMenuItem.CheckedChanged += new System.EventHandler(this.changeHighLightsToolStripMenuItem_Click);
+            // 
+            // duplicateNameContentToolStripMenuItem
+            // 
+            this.duplicateNameContentToolStripMenuItem.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(192)))), ((int)(((byte)(255)))), ((int)(((byte)(192)))));
+            this.duplicateNameContentToolStripMenuItem.Checked = true;
+            this.duplicateNameContentToolStripMenuItem.CheckOnClick = true;
+            this.duplicateNameContentToolStripMenuItem.CheckState = System.Windows.Forms.CheckState.Checked;
+            this.duplicateNameContentToolStripMenuItem.Name = "duplicateNameContentToolStripMenuItem";
+            this.duplicateNameContentToolStripMenuItem.ShowShortcutKeys = false;
+            this.duplicateNameContentToolStripMenuItem.Size = new System.Drawing.Size(325, 26);
+            this.duplicateNameContentToolStripMenuItem.Text = "Duplicate Name+Content in Green";
+            this.duplicateNameContentToolStripMenuItem.CheckedChanged += new System.EventHandler(this.changeHighLightsToolStripMenuItem_Click);
+            // 
+            // toolStripSeparator5
+            // 
+            this.toolStripSeparator5.Name = "toolStripSeparator5";
+            this.toolStripSeparator5.Size = new System.Drawing.Size(6, 59);
             // 
             // listViewFiles
             // 
@@ -351,7 +539,10 @@
             this.columnExt,
             this.columnSize,
             this.columnCompressed,
-            this.columnRatio});
+            this.columnRatio,
+            this.columnMethod,
+            this.columnOffset,
+            this.columnSha256});
             this.listViewFiles.ContextMenuStrip = this.checkListContextMenu;
             this.listViewFiles.Dock = System.Windows.Forms.DockStyle.Fill;
             this.listViewFiles.FullRowSelect = true;
@@ -362,7 +553,7 @@
             this.listViewFiles.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
             this.listViewFiles.MultiSelect = false;
             this.listViewFiles.Name = "listViewFiles";
-            this.listViewFiles.Size = new System.Drawing.Size(842, 408);
+            this.listViewFiles.Size = new System.Drawing.Size(942, 463);
             this.listViewFiles.TabIndex = 4;
             this.listViewFiles.Tag = "A";
             this.listViewFiles.UseCompatibleStateImageBehavior = false;
@@ -394,27 +585,41 @@
             // 
             this.columnCompressed.Text = "Compressed";
             this.columnCompressed.TextAlign = System.Windows.Forms.HorizontalAlignment.Right;
-            this.columnCompressed.Width = 75;
+            this.columnCompressed.Width = 102;
             // 
             // columnRatio
             // 
             this.columnRatio.Tag = "";
             this.columnRatio.Text = "Ratio";
-            this.columnRatio.TextAlign = System.Windows.Forms.HorizontalAlignment.Right;
             this.columnRatio.Width = 48;
+            // 
+            // columnMethod
+            // 
+            this.columnMethod.Text = "Method";
+            this.columnMethod.Width = 0;
+            // 
+            // columnOffset
+            // 
+            this.columnOffset.Text = "Offset";
+            this.columnOffset.Width = 0;
+            // 
+            // columnSha256
+            // 
+            this.columnSha256.Text = "SHA-256";
+            this.columnSha256.Width = 0;
             // 
             // MainForm
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(8F, 16F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(842, 493);
+            this.ClientSize = new System.Drawing.Size(942, 548);
             this.Controls.Add(this.listViewFiles);
             this.Controls.Add(this.statusStrip);
             this.Controls.Add(this.toolStrip);
             this.Icon = ((System.Drawing.Icon)(resources.GetObject("$this.Icon")));
             this.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
             this.Name = "MainForm";
-            this.Text = "HPIZ Archiver";
+            this.Text = "HPIZ Archiver v1.3b";
             this.Load += new System.EventHandler(this.MainForm_Load);
             this.statusStrip.ResumeLayout(false);
             this.statusStrip.PerformLayout();
@@ -460,11 +665,30 @@
         private System.Windows.Forms.ToolStripComboBox flavorLevelComboBox;
         private System.Windows.Forms.ToolStripLabel flavorStripLabel;
         private System.Windows.Forms.ToolStripSeparator toolStripSeparator3;
-        private System.Windows.Forms.ToolStripDropDownButton rulesStripButton;
-        private System.Windows.Forms.ToolStripMenuItem keepFirstToolStripMenuItem;
+        private System.Windows.Forms.ToolStripDropDownButton manageDuplicateNamesStripButton;
+        private System.Windows.Forms.ToolStripMenuItem keepFirstNameToolStripMenuItem;
         private System.Windows.Forms.ToolStrip toolStrip;
-        private System.Windows.Forms.ToolStripMenuItem keepLastToolStripMenuItem;
-        private System.Windows.Forms.ToolStripMenuItem uncheckAllDuplicatesToolStripMenuItem;
+        private System.Windows.Forms.ToolStripMenuItem keepLastNameToolStripMenuItem;
+        private System.Windows.Forms.ToolStripMenuItem uncheckAllDuplicateNamesToolStripMenuItem;
+        private System.Windows.Forms.ColumnHeader columnMethod;
+        private System.Windows.Forms.ColumnHeader columnSha256;
+        private System.Windows.Forms.ToolStripSeparator toolStripSeparator2;
+        private System.Windows.Forms.ToolStripMenuItem fullNameToolStripMenuItem;
+        private System.Windows.Forms.ToolStripMenuItem extensionToolStripMenuItem;
+        private System.Windows.Forms.ToolStripMenuItem sizeToolStripMenuItem;
+        private System.Windows.Forms.ToolStripMenuItem ratioToolStripMenuItem;
+        private System.Windows.Forms.ToolStripMenuItem methodToolStripMenuItem;
+        private System.Windows.Forms.ToolStripMenuItem sha256ToolStripMenuItem;
+        private System.Windows.Forms.ToolStripMenuItem compressionToolStripMenuItem;
+        private System.Windows.Forms.ToolStripDropDownButton HighlightsToolStripDropDownButton;
+        private System.Windows.Forms.ToolStripMenuItem duplicateNamesinYellowStripMenuItem;
+        private System.Windows.Forms.ToolStripMenuItem duplicateNameContentToolStripMenuItem;
+        private System.Windows.Forms.ToolStripSeparator toolStripSeparator6;
+        private System.Windows.Forms.ToolStripMenuItem unknowFoldersExtensionToolStripMenuItem;
+        private System.Windows.Forms.ToolStripSeparator toolStripSeparator5;
+        private System.Windows.Forms.ColumnHeader columnOffset;
+        private System.Windows.Forms.ToolStripMenuItem offsetToolStripMenuItem;
+        private System.Windows.Forms.ToolStripMenuItem duplicateContentsToolStripMenuItem;
     }
 }
 

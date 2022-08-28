@@ -69,7 +69,7 @@ namespace HPIZ
 
             foreach (var entry in entriesDictionary.Keys)
             {
-                if (entriesDictionary[entry].FlagCompression != CompressionMethod.None)
+                if (entriesDictionary[entry].FlagCompression != CompressionMethod.StoreUncompressed)
                 {
                     int chunkCount = entriesDictionary[entry].CalculateChunkQuantity();
                     archiveStream.Position = entriesDictionary[entry].OffsetOfCompressedData;

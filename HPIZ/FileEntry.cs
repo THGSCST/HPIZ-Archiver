@@ -22,10 +22,10 @@ namespace HPIZ
             parent = parentArchive;
         }
 
-        public FileEntry (byte[] uncompressedBytes, CompressionFlavor flavor, string fileName, IProgress<string> progress)
+        public FileEntry (byte[] uncompressedBytes, CompressionMethod flavor, string reportProgressFileName, IProgress<string> progress)
         {
             UncompressedSize = uncompressedBytes.Length;
-            if (flavor != CompressionFlavor.StoreUncompressed && uncompressedBytes.Length > Strategy.DeflateBreakEven) //Skip compression of small files
+            if (flavor != CompressionMethod.StoreUncompressed && uncompressedBytes.Length > Strategy.DeflateBreakEven) //Skip compression of small files
             {
                 if (uncompressedBytes.Length > Chunk.MaxSize) //Split into chunks
                 {
@@ -33,7 +33,7 @@ namespace HPIZ
                     ChunkBytes = new MemoryStream[compressedChunkSizes.Length];
 
                     // Parallelize chunk compression start
-                    System.Threading.Tasks.Parallel.For(0, compressedChunkSizes.Length, j =>
+                    Parallel.For(0, compressedChunkSizes.Length, j =>
                     {
                         int chunkSize = Chunk.MaxSize;
                         if (j + 1 == compressedChunkSizes.Length && uncompressedBytes.Length != Chunk.MaxSize) chunkSize = uncompressedBytes.Length % Chunk.MaxSize; //Last loop
@@ -43,11 +43,11 @@ namespace HPIZ
 
                         ChunkBytes[j] = Chunk.Compress(uncompressedChunk, flavor);
 
-                        FlagCompression = CompressionMethod.ZLib;
+                        FlagCompression = CompressionMethod.ZLibDeflate;
                         compressedChunkSizes[j] = (int) ChunkBytes[j].Length;
 
                         if (progress != null)
-                            progress.Report(fileName + ":Chunk#" + j.ToString());
+                            progress.Report(reportProgressFileName + ":Chunk#" + j.ToString());
                     }); // Parallel.For end 
                 }
                 else //Single chunk
@@ -57,26 +57,26 @@ namespace HPIZ
 
                     if (Strategy.TryCompressKeepIfWorthwhile && ChunkBytes[0].Length + 4 > uncompressedBytes.Length)
                     {
-                        FlagCompression = CompressionMethod.None;
+                        FlagCompression = CompressionMethod.StoreUncompressed;
                         ChunkBytes[0] = new MemoryStream(uncompressedBytes);
                     }
                     else
                     {
-                        FlagCompression = CompressionMethod.ZLib;
+                        FlagCompression = CompressionMethod.ZLibDeflate;
                         compressedChunkSizes = new int[] { (int) ChunkBytes[0].Length };
                     }
 
                     if (progress != null)
-                        progress.Report(fileName + ":Chunk#0");
+                        progress.Report(reportProgressFileName + ":Chunk#0");
                 }
             }
             else
             {
-                FlagCompression = CompressionMethod.None;
+                FlagCompression = CompressionMethod.StoreUncompressed;
                 ChunkBytes = new MemoryStream[1];
                 ChunkBytes[0] = new MemoryStream(uncompressedBytes);
                 if (progress != null)
-                    progress.Report(fileName);
+                    progress.Report(reportProgressFileName);
             }
         }
 
@@ -84,7 +84,7 @@ namespace HPIZ
         {
             BinaryReader reader = new BinaryReader(parent.archiveStream);
             reader.BaseStream.Position = OffsetOfCompressedData;
-            if(FlagCompression != CompressionMethod.None)
+            if(FlagCompression != CompressionMethod.StoreUncompressed)
                 reader.BaseStream.Position += compressedChunkSizes.Length * 4;
             var outputBytes = new byte[compressedChunkSizes.Length][];
             for (int i = 0; i < outputBytes.Length; i++)
@@ -97,7 +97,7 @@ namespace HPIZ
         {
             BinaryReader reader = new BinaryReader(parent.archiveStream);
 
-            if (FlagCompression == CompressionMethod.None)
+            if (FlagCompression == CompressionMethod.StoreUncompressed)
             {
                 reader.BaseStream.Position = OffsetOfCompressedData;
                 var uncompressedOutput = reader.ReadBytes(UncompressedSize);
@@ -107,7 +107,7 @@ namespace HPIZ
                 return uncompressedOutput;
             }
 
-            if (FlagCompression != CompressionMethod.LZ77 && FlagCompression != CompressionMethod.ZLib)
+            if (FlagCompression != CompressionMethod.LZ77 && FlagCompression != CompressionMethod.ZLibDeflate)
                 throw new Exception("Unknown compression method in file entry");
 
             var chunkCount = compressedChunkSizes.Length;
@@ -137,7 +137,7 @@ namespace HPIZ
 
         public int CompressedSizeCount()
         {
-            if (FlagCompression == CompressionMethod.None)
+            if (FlagCompression == CompressionMethod.StoreUncompressed)
                 return UncompressedSize;
             else
                 return compressedChunkSizes.Sum() + compressedChunkSizes.Length * 4;
