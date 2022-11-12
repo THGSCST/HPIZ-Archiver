@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -60,7 +61,7 @@ namespace HPIZ
             int rootNumberOfEntries = archiveReader.ReadInt32();
             int rootOffset = archiveReader.ReadInt32();
 
-            entriesDictionary = new SortedDictionary<string, FileEntry>();
+            entriesDictionary = new SortedDictionary<string, FileEntry>(StringComparer.OrdinalIgnoreCase);
             Entries = new ReadOnlyDictionary<string, FileEntry>(entriesDictionary);
 
             GetEntries(rootNumberOfEntries, rootOffset, archiveReader, string.Empty);
@@ -72,16 +73,16 @@ namespace HPIZ
                 if (entriesDictionary[entry].FlagCompression != CompressionMethod.StoreUncompressed)
                 {
                     int chunkCount = entriesDictionary[entry].CalculateChunkQuantity();
-                    archiveStream.Position = entriesDictionary[entry].OffsetOfCompressedData;
+                    archiveStream.Position = entriesDictionary[entry].CompressedDataOffset;
                     var buffer = archiveReader.ReadBytes(chunkCount * 4);
 
                     if (obfuscationKey != 0)
-                        Clarify(buffer, (int) entriesDictionary[entry].OffsetOfCompressedData);
+                        Clarify(buffer, (int) entriesDictionary[entry].CompressedDataOffset);
 
                     var size = new int[chunkCount];
                     Buffer.BlockCopy(buffer, 0, size, 0, buffer.Length);
 
-                    entriesDictionary[entry].compressedChunkSizes = size;
+                    entriesDictionary[entry].CompressedChunkSizes = size;
                 }
             }
         }
@@ -128,13 +129,15 @@ namespace HPIZ
 
                 int previousPos = (int)bw.BaseStream.Position;
                 bw.BaseStream.Position = posString;
+
                 WriteStringCP437NullTerminated(bw, item.Key);
                 if (isDir)
                     SetEntries(item.Value, bw, sequence);
                 else
                 {
                     sequence.MoveNext();
-                    bw.Write(sequence.Current.OffsetOfCompressedData); //OffsetOfData
+
+                    bw.Write(sequence.Current.CompressedDataOffset); //OffsetOfData
                     bw.Write(sequence.Current.UncompressedSize); //UncompressedSize 
                     bw.Write((byte)sequence.Current.FlagCompression); //FlagCompression 
 

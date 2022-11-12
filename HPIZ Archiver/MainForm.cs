@@ -8,7 +8,6 @@ using System.Linq;
 using System.Security.Policy;
 using System.Threading.Tasks;
 using System.Windows.Forms;
-using static System.Net.WebRequestMethods;
 
 namespace HPIZArchiver
 {
@@ -19,6 +18,8 @@ namespace HPIZArchiver
 
         Dictionary<int, List<ListViewItem>> toHashCandidates = new Dictionary<int, List<ListViewItem>>();
         Dictionary<string, List<ListViewItem>> sameContent = new Dictionary<string, List<ListViewItem>>();
+
+        Dictionary<string, HpiArchive> cachedHPI = new Dictionary<string, HpiArchive>(StringComparer.OrdinalIgnoreCase);
 
         Stopwatch timer = new Stopwatch();
 
@@ -62,6 +63,7 @@ namespace HPIZArchiver
             listViewFiles.Groups.Clear();
             uniqueSources.Clear();
             uniqueNames.Clear();
+            cachedHPI.Clear();
             toHashCandidates.Clear();
             sameContent.Clear();
             totalSize = 0;
@@ -95,29 +97,17 @@ namespace HPIZArchiver
             }
 
             foreach (ListViewGroup group in listViewFiles.Groups)
-                if (Directory.Exists(group.Name))
-                {
                     foreach (var candidate in toHashCandidates.Values)
                         if (candidate.Count > 1 && candidate[0].Group == group && candidate[0].SubItems[8].Text == string.Empty)
                         {
-                            candidate[0].SubItems[8].Text = Utils.CalculateSha256((string)candidate[0].SubItems[1].Tag);
+                            if (Directory.Exists(group.Name))
+                                candidate[0].SubItems[8].Text = Utils.CalculateSha256( Path.Combine(group.Name, candidate[0].SubItems[1].Text) );
+                            else
+                                candidate[0].SubItems[8].Text = Utils.CalculateSha256(cachedHPI[group.Name].Entries[candidate[0].SubItems[1].Text].Uncompress());
                             if (sameContent.ContainsKey(candidate[0].SubItems[8].Text))
                                 sameContent[candidate[0].SubItems[8].Text].Add(candidate[0]);
                             else sameContent.Add(candidate[0].SubItems[8].Text, new List<ListViewItem>() { candidate[0] });
                         }
-                }
-                else
-                    using (HpiArchive hpia = HpiFile.Open(group.Name))
-                        foreach (var candidate in toHashCandidates.Values)
-                        if (candidate.Count > 1 && candidate[0].Group == group && candidate[0].SubItems[8].Text == string.Empty)
-                        {
-                            candidate[0].SubItems[8].Text = Utils.CalculateSha256(hpia.Entries[candidate[0].SubItems[1].Text].Uncompress());
-                            if (sameContent.ContainsKey(candidate[0].SubItems[8].Text))
-                                sameContent[candidate[0].SubItems[8].Text].Add(candidate[0]);
-                            else sameContent.Add(candidate[0].SubItems[8].Text, new List<ListViewItem>() { candidate[0] });
-                        }
-
-
 
             SetRule(dRules);
             SetHighliths();
@@ -163,6 +153,7 @@ namespace HPIZArchiver
                     if(!uniqueSources.Contains(file))
                     {
                         uniqueSources.Add(file);
+                        cachedHPI.Add(file, HpiFile.Open(file));
                         var filesInfo = await Task.Run(() => GetListViewGroupItens(file));
                         AddToListViewFiles(filesInfo);
                     }
@@ -247,48 +238,45 @@ namespace HPIZArchiver
             else //HPI Files
             {
                 var group = new ListViewGroup(fullPath, Path.GetExtension(fullPath).ToUpper() + " File - " + fullPath);
-                using (HpiArchive hpia = HpiFile.Open(fullPath))
+                foreach (var entry in cachedHPI[fullPath].Entries)
                 {
-                    foreach (var entry in hpia.Entries)
+                    totalSize += entry.Value.UncompressedSize;
+                    totalCompressedSize += entry.Value.CompressedSizeCount();
+
+                    ListViewItem lvItem = new ListViewItem(new string[] {
+                        String.Empty,
+                        entry.Key,
+                        Path.GetExtension(entry.Key).ToUpper(),
+                        entry.Value.UncompressedSize.ToString("N0"),
+                        entry.Value.CompressedSizeCount().ToString("N0"),
+                        entry.Value.Ratio().ToString("P1"),
+                        entry.Value.FlagCompression.ToString(),
+                        entry.Value.CompressedDataOffset.ToString("X8"),
+                        String.Empty
+                    }, group);
+
+                    lvItem.SubItems[1].Tag = fullPath;
+                    lvItem.SubItems[3].Tag = entry.Value.UncompressedSize;
+                    lvItem.SubItems[4].Tag = entry.Value.CompressedSizeCount();
+                    lvItem.SubItems[5].Tag = entry.Value.Ratio();
+                    lvItem.SubItems[6].Tag = entry.Value.FlagCompression;
+                    lvItem.Tag = fullPath;
+                    listColection.Add(lvItem);
+
+                    if (sha256ToolStripMenuItem.Checked || toHashCandidates.ContainsKey(entry.Value.UncompressedSize))
                     {
-                        totalSize += entry.Value.UncompressedSize;
-                        totalCompressedSize += entry.Value.CompressedSizeCount();
+                        var hash = Utils.CalculateSha256(entry.Value.Uncompress());
+                        lvItem.SubItems[8].Text = hash;
 
-                        ListViewItem lvItem = new ListViewItem(new string[] {
-                            String.Empty,
-                            entry.Key,
-                            Path.GetExtension(entry.Key).ToUpper(),
-                            entry.Value.UncompressedSize.ToString("N0"),
-                            entry.Value.CompressedSizeCount().ToString("N0"),
-                            entry.Value.Ratio().ToString("P1"),
-                            entry.Value.FlagCompression.ToString(),
-                            entry.Value.OffsetOfCompressedData.ToString("X8"),
-                            String.Empty
-                        }, group);
+                        if(!sha256ToolStripMenuItem.Checked)
+                            toHashCandidates[entry.Value.UncompressedSize].Add(lvItem);
 
-                        lvItem.SubItems[1].Tag = fullPath;
-                        lvItem.SubItems[3].Tag = entry.Value.UncompressedSize;
-                        lvItem.SubItems[4].Tag = entry.Value.CompressedSizeCount();
-                        lvItem.SubItems[5].Tag = entry.Value.Ratio();
-                        lvItem.SubItems[6].Tag = entry.Value.FlagCompression;
-                        lvItem.Tag = fullPath;
-                        listColection.Add(lvItem);
-
-                        if (sha256ToolStripMenuItem.Checked || toHashCandidates.ContainsKey(entry.Value.UncompressedSize))
-                        {
-                            var hash = Utils.CalculateSha256(entry.Value.Uncompress());
-                            lvItem.SubItems[8].Text = hash;
-
-                            if(!sha256ToolStripMenuItem.Checked)
-                                toHashCandidates[entry.Value.UncompressedSize].Add(lvItem);
-
-                            if (sameContent.ContainsKey(hash))
-                                sameContent[hash].Add(lvItem);
-                            else sameContent.Add(hash, new List<ListViewItem>() { lvItem });
-                        }
-                        else
-                            toHashCandidates.Add(entry.Value.UncompressedSize, new List<ListViewItem>() { lvItem });
+                        if (sameContent.ContainsKey(hash))
+                            sameContent[hash].Add(lvItem);
+                        else sameContent.Add(hash, new List<ListViewItem>() { lvItem });
                     }
+                    else
+                        toHashCandidates.Add(entry.Value.UncompressedSize, new List<ListViewItem>() { lvItem });
                 }
             }
             return listColection;
@@ -316,7 +304,7 @@ namespace HPIZArchiver
 
                 timer.Restart();
 
-                await Task.Run(() => HpiFile.DoExtraction(sources, dialogExtractToFolder.SelectedPath, progress));
+                await Task.Run(() => HpiFile.DoExtraction(sources, dialogExtractToFolder.SelectedPath, progress, cachedHPI));
 
                 timer.Stop();
 
@@ -330,33 +318,25 @@ namespace HPIZArchiver
             }
         }
 
-        public PathCollection GetCheckedFileNames()
+        public FilePathCollection GetCheckedFileNames()
         {
-            PathCollection fileList = new PathCollection();
+            FilePathCollection fileList = new FilePathCollection();
 
             foreach (ListViewItem item in listViewFiles.CheckedItems)
-            {
-                if (fileList.ContainsKey(item.Group.Name))
-                    fileList[item.Group.Name].Add(item.SubItems[1].Text);
-                else
-                    fileList.Add(item.Group.Name, new SortedSet<string>() { item.SubItems[1].Text });
-            }
+                fileList.AddOrReplace(item.SubItems[1].Text, item.Group.Name);
 
             return fileList;
         }
 
-        private async void compressCheckedFilesToolStripMenuItem_Click(object sender, EventArgs e)
+        public async void compressOrRepackCheckedFiles()
         {
-            if (listViewFiles.CheckedItems.Count == 0)
-                MessageBox.Show("Can't Compress: No files have been checked in the list.");
-
-            else if (dialogSaveHpi.ShowDialog() == DialogResult.OK)
+            if (dialogSaveHpi.ShowDialog() == DialogResult.OK)
             {
                 SetMode(ArchiverMode.Busy);
 
                 firstStatusLabel.Text = "Compressing... Last processed:";
 
-                //Calculate total size and number of chunks
+                //Calculate total size and number of chunks to max progressbar
                 foreach (ListViewItem item in listViewFiles.CheckedItems)
                     progressBar.Maximum += FileEntry.CalculateChunkQuantity((int)item.SubItems[3].Tag);
 
@@ -372,9 +352,29 @@ namespace HPIZArchiver
 
                 var sources = GetCheckedFileNames();
 
-                timer.Restart();
+                var duplicateResults = new SortedDictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
-                await Task.Run(() => HpiFile.CreateFromManySources(sources, dialogSaveHpi.FileName, flavor, progress));
+                foreach (var sames in sameContent.Values)
+                {
+                    string first = string.Empty;
+                    SortedSet<string> orderedSames = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
+                    foreach (var item in sames)
+                        if(item.Checked == true)
+                        orderedSames.Add(item.SubItems[1].Text);
+
+                    foreach (var item in orderedSames)
+                        if (first == string.Empty)
+                            first = item;
+                        else if (!duplicateResults.ContainsKey(item))
+                                duplicateResults.Add(item, first);
+                }
+
+
+                duplicateResults = null;
+
+            timer.Restart();
+
+                await Task.Run(() => HpiFile.CreateFromManySources(sources, dialogSaveHpi.FileName, flavor, progress, cachedHPI, duplicateResults));
 
                 timer.Stop();
 
@@ -386,6 +386,22 @@ namespace HPIZArchiver
                 TaskbarProgress.FlashWindow(this.Handle, true);
                 SetMode(ArchiverMode.Finish);
             }
+        }
+
+        private void compressCheckedFilesToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            if (listViewFiles.CheckedItems.Count == 0)
+                MessageBox.Show("Can't Compress: No files have been checked in the list.");
+            else
+                compressOrRepackCheckedFiles();
+        }
+
+        private void mergeRepackCheckedFilesToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            if (listViewFiles.CheckedItems.Count == 0)
+                MessageBox.Show("Can't Merge/Repack: No files have been checked in the list.");
+            else
+                compressOrRepackCheckedFiles();
         }
 
         private void selectAllToolStripMenuItem_Click(object sender, EventArgs e)
@@ -426,49 +442,6 @@ namespace HPIZArchiver
                     if (e.Column == 5) listViewFiles.ListViewItemSorter = new ListViewItemFloatComparerDesc(e.Column);
                     listViewFiles.Tag = "D";
                 }
-            }
-        }
-
-        private async void mergeRepackCheckedFilesToolStripMenuItem_Click(object sender, EventArgs e)
-        {
-            if(listViewFiles.CheckedItems.Count == 0)
-                MessageBox.Show("Can't Merge/Repack: No files have been checked in the list.");
-
-            else if (dialogSaveHpi.ShowDialog() == DialogResult.OK)
-            {
-                SetMode(ArchiverMode.Busy);
-
-                firstStatusLabel.Text = "Compressing... Last processed:";
-
-                CompressionMethod flavor;
-                Enum.TryParse(flavorLevelComboBox.Text, out flavor);
-
-                //Calculate total size and number of chunks to max progressbar
-                foreach (ListViewItem item in listViewFiles.CheckedItems)
-                    progressBar.Maximum += FileEntry.CalculateChunkQuantity((int)item.SubItems[3].Tag);
-
-                var progress = new Progress<string>(last =>
-                {
-                    secondStatusLabel.Text = last;
-                    progressBar.PerformStep();
-                    TaskbarProgress.SetValue(this.Handle, progressBar.Value, progressBar.Maximum);
-                });
-
-                var sources = GetCheckedFileNames();
-
-                timer.Restart();
-
-                await Task.Run(() => HpiFile.CreateFromManySources(sources, dialogSaveHpi.FileName, flavor, progress));
-
-                timer.Stop();
-                
-                firstStatusLabel.Text = String.Format("Done! Elapsed time: {0}h {1}m {2}s {3}ms", timer.Elapsed.Hours, timer.Elapsed.Minutes,
-                timer.Elapsed.Seconds, timer.Elapsed.Milliseconds);
-                progressBar.Value = progressBar.Maximum;
-                secondStatusLabel.Text = dialogSaveHpi.FileName;
-                secondStatusLabel.IsLink = true;
-                TaskbarProgress.FlashWindow(this.Handle, true);
-                SetMode(ArchiverMode.Finish);
             }
         }
 
@@ -589,7 +562,7 @@ namespace HPIZArchiver
 
 
             foreach (ListViewItem item in listViewFiles.Items)
-                    if (!FolderExtension.CheckKnow(item.SubItems[1].Text))
+                    if (!DirectoryExtensionPair.IsDirectoryExtensionKnow(item.SubItems[1].Text))
                     if (unknowFoldersExtensionToolStripMenuItem.Checked)
                         item.BackColor = unknowFoldersExtensionToolStripMenuItem.BackColor;
                 else if (item.BackColor == unknowFoldersExtensionToolStripMenuItem.BackColor)

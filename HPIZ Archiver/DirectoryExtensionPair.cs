@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace HPIZArchiver
 {
-     static class FolderExtension
+     static class DirectoryExtensionPair
     {
         static readonly Dictionary<string, string[]> folderExtensionPairs = new Dictionary<string, string[]>()
         {
@@ -45,7 +45,7 @@ namespace HPIZArchiver
             { @"weapons", new string[] { "tdf" } }
         };
 
-        public static bool CheckKnow(string path)
+        public static bool IsDirectoryExtensionKnow(string path)
         {
             path = path.ToLower();
             foreach (var folder in folderExtensionPairs.Keys)

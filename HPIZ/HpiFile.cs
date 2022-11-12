@@ -3,10 +3,8 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using System.Security.Cryptography;
-using System.Threading.Tasks;
 using System.Windows.Forms;
-using System.IO;
+using HPIZArchiver;
 
 namespace HPIZ
 {
@@ -15,7 +13,7 @@ namespace HPIZ
 
         public static HpiArchive Open(string archiveFileName)
         {
-            return new HpiArchive(new FileStream(archiveFileName, FileMode.Open, FileAccess.Read, FileShare.Read));
+            return new HpiArchive(new FileStream(archiveFileName, FileMode.Open, FileAccess.ReadWrite, FileShare.ReadWrite));
         }
 
         public static HpiArchive Create(string archiveFileName)
@@ -23,160 +21,154 @@ namespace HPIZ
             throw new System.NotImplementedException();
         }
 
-        public static void DoExtraction(PathCollection archivesFiles, string destinationPath, IProgress<string> progress)
+        public static void DoExtraction(FilePathCollection archivesFiles, string destinationPath, IProgress<string> progress, Dictionary<string, HpiArchive> cache = null)
         {
-            foreach (var archiveFullPath in archivesFiles.Keys)
+            foreach (var filePath in archivesFiles.Keys)
             {
-                using (var archive = new HpiArchive(File.OpenRead(archiveFullPath)))
-                {
-                    //int progressLimiter = (fileList.Count - 1) / 100 + 1; //Reduce progress calls
+                //int progressLimiter = (fileList.Count - 1) / 100 + 1; //Reduce progress calls
+                    string fullName = destinationPath + "\\" + filePath;
+                    Directory.CreateDirectory(Path.GetDirectoryName(fullName));
 
-                    foreach (var shortFileName in archivesFiles[archiveFullPath])
-                    {
-                        string fullName = destinationPath + "\\" + shortFileName;
-                        Directory.CreateDirectory(Path.GetDirectoryName(fullName));
-                        var entry = archive.Entries[shortFileName];
-                        File.WriteAllBytes(fullName, entry.Uncompress());
 
-                        //Report progress
-                        if (progress != null) //&& i % progressLimiter == 0)
-                            progress.Report(shortFileName);
-                    }
-                }
+                    System.Diagnostics.Debug.WriteLine(filePath);
+
+                var source = archivesFiles[filePath];
+
+                    if (cache != null)
+                        File.WriteAllBytes(fullName, cache[source].Entries[filePath].Uncompress());
+                    else
+                        using (var archive = new HpiArchive(File.OpenRead(source)))
+                            File.WriteAllBytes(fullName, archive.Entries[filePath].Uncompress());
+
+                    System.Diagnostics.Debug.WriteLine("DONE: " + filePath);
+
+                    //Report progress
+                    if (progress != null) //&& i % progressLimiter == 0)
+                        progress.Report(filePath);
             }
         }
 
         public static void CreateFromDirectory(string sourceDirectoryFullName, string destinationArchiveFileName, CompressionMethod flavor, IProgress<string> progress)
         {
             destinationArchiveFileName = Path.GetFullPath(destinationArchiveFileName);
-            var fileList = GetDirectoryFileList(sourceDirectoryFullName);
+            var fileList = new FilePathCollection(sourceDirectoryFullName);
             CreateFromManySources(fileList, destinationArchiveFileName, flavor, progress);
         }
 
-        public static PathCollection GetDirectoryFileList(string sourceDirectoryFullName)
+        public static void CreateFromManySources(FilePathCollection sources, string destinationArchiveFileName, CompressionMethod flavor, IProgress<string> progress, Dictionary<string, HpiArchive> cache = null, SortedDictionary<string, string> duplicates = null)
         {
-            var fileList = new PathCollection();
-            sourceDirectoryFullName = Path.GetFullPath(sourceDirectoryFullName);
-            fileList.Add(sourceDirectoryFullName, new SortedSet<string>());
-            var files = Directory.EnumerateFiles(sourceDirectoryFullName, "*", SearchOption.AllDirectories);
-            foreach (var file in files)
-            {
-                fileList[sourceDirectoryFullName].Add(file.Substring(sourceDirectoryFullName.Length + 1));
-            }
-            return fileList;
-        }
-
-        public static void CreateFromManySources(PathCollection sources, string destinationArchiveFileName, CompressionMethod flavor, IProgress<string> progress)
-        {
-            var duplicates = FindDuplicateContent(sources);
+            if(duplicates == null)
+                duplicates = FindDuplicateContent(sources, cache);
 
             var files = new SortedDictionary<string, FileEntry>(StringComparer.OrdinalIgnoreCase);
 
-            foreach (var dirOrArchivePath in sources.Keys)
+            foreach (var filePath in sources.Keys)
             {
-                //Check if source is a directory or HPI archive
-                if(Directory.Exists(dirOrArchivePath))
-                    foreach (var shortFileName in sources[dirOrArchivePath])
+                var sourcePath = sources[filePath];
+                //Check if source path is a directory or HPI archive
+                if (Directory.Exists(sourcePath))
                     {
-                        string fullName = Path.Combine(dirOrArchivePath, shortFileName);
+                        string fullName = Path.Combine(sourcePath, filePath);
                         var file = new FileInfo(fullName);
                         if (file.Length > Int32.MaxValue)
-                            throw new Exception("File is too large: " + shortFileName + ". Maximum allowed size is 2GBybtes.");
+                            throw new Exception("File is too large: " + filePath + ". Maximum allowed size is 2GBytes.");
                         byte[] buffer = File.ReadAllBytes(fullName);
-                        if(!files.ContainsKey(shortFileName))
-                            files.Add(shortFileName, new FileEntry(buffer, flavor, fullName, progress));
+                        files.Add(filePath, new FileEntry(buffer, flavor, fullName, progress));
                     }
                 else //Is HPI archive
-                    using (var archive = new HpiArchive(File.OpenRead(dirOrArchivePath)))
-                        foreach (var shortFileName in sources[dirOrArchivePath])
-                        {
-                            var buffer = archive.Entries[shortFileName].Uncompress();
+                    {
+                        byte[] buffer;
 
-                            if (!files.ContainsKey(shortFileName))
-                                files.Add(shortFileName, new FileEntry(buffer, flavor, shortFileName, progress));
-                        }
+                        if(cache != null)
+                            buffer = cache[sourcePath].Entries[filePath].Uncompress();
+                        else
+                            using (var archive = new HpiArchive(File.OpenRead(sourcePath)))
+                                buffer = archive.Entries[filePath].Uncompress();
+
+                            files.Add(filePath, new FileEntry(buffer, flavor, filePath, progress));
+                    }
             }
+
+            if(cache != null)
+                foreach (var archive in cache)
+                    archive.Value.Dispose();
 
             WriteToFile(destinationArchiveFileName, files, duplicates);
         }
 
-        public static Dictionary<string, string> FindDuplicateContent(PathCollection sources)
+        public static SortedDictionary<string, string> FindDuplicateContent(FilePathCollection sources, Dictionary<string, HpiArchive> cache = null)
         {
-            var toHashCandidates = new Dictionary<long, List<(string, string)>>();
+            if (cache == null)
+                cache = new Dictionary<string, HpiArchive>();
 
-            foreach (var dirOrArchivePath in sources.Keys)
+            var toHashCandidates = new Dictionary<long, FilePathCollection>();
+
+            foreach (var filePath in sources.Keys)
+            {
+                var sourcePath = sources[filePath];
+                long fileSize;
                 //Check if source is a directory or HPI archive
-                if (Directory.Exists(dirOrArchivePath))
-                    foreach (var shortFileName in sources[dirOrArchivePath])
-                    {
-                        string fullName = Path.Combine(dirOrArchivePath, shortFileName);
-                        var fileSize = new FileInfo(fullName).Length;
-
-                        if (toHashCandidates.ContainsKey(fileSize))
-                            toHashCandidates[fileSize].Add((dirOrArchivePath, shortFileName));
-                        else
-                            toHashCandidates.Add(fileSize, new List<(string, string)>() { (dirOrArchivePath, shortFileName) });
-                    }
+                if (Directory.Exists(sourcePath))
+                {
+                    string fullName = Path.Combine(sourcePath, filePath);
+                     fileSize = new FileInfo(fullName).Length;
+                }
                 else //Is HPI archive
-                    using (var archive = new HpiArchive(System.IO.File.OpenRead(dirOrArchivePath)))
-                        foreach (var shortFileName in sources[dirOrArchivePath])
-                        {
-                            var entry = archive.Entries[shortFileName];
-                            var fileSize = entry.UncompressedSize;
+                {
+                    if (!cache.ContainsKey(sourcePath))
+                        cache.Add(sourcePath, HpiFile.Open(sourcePath));
 
-                            if (toHashCandidates.ContainsKey(fileSize))
-                                toHashCandidates[fileSize].Add((dirOrArchivePath, shortFileName));
-                            else
-                                toHashCandidates.Add(fileSize, new List<(string, string)>() { (dirOrArchivePath, shortFileName) });
-                        }
+                    Debug.WriteLine(sourcePath + filePath);
+
+                     fileSize = cache[sourcePath].Entries[filePath].UncompressedSize;
+                }
+                if (toHashCandidates.ContainsKey(fileSize))
+                    toHashCandidates[fileSize].Add(filePath, sourcePath);
+                else
+                    toHashCandidates.Add(fileSize, new FilePathCollection(filePath, sourcePath));
+            }
 
 
-            var hashedFiles = new Dictionary<string, List<(string, string)>>(StringComparer.OrdinalIgnoreCase);
+            var hashedFiles = new Dictionary<string, FilePathCollection>(StringComparer.OrdinalIgnoreCase);
 
-            foreach (var pathPair in toHashCandidates.Values)
-                if(pathPair.Count > 1)
-                foreach (var candidate in pathPair)
-                    //Check if source is a directory or HPI archive
-                    if (Directory.Exists(candidate.Item1))
+            foreach (var fileList in toHashCandidates.Values)
+                if(fileList.Count > 1)
+                foreach (var candidate in fileList.Keys)
                     {
-                        string fullName = Path.Combine(candidate.Item1, candidate.Item2);
+                        var sourcePath = fileList[candidate];
                         string hash;
 
-                        using (SHA256 sha256Hash = SHA256.Create())
-                            hash = BitConverter.ToString(sha256Hash.ComputeHash(System.IO.File.ReadAllBytes(fullName)));
+                        //Check if source is a directory or HPI archive
+                        if (Directory.Exists(sourcePath))
+                        {
+                            string fullName = Path.Combine(sourcePath, candidate);
+                            hash = Utils.CalculateSha256(fullName);
+                        }
+                        else //Is HPI archive
+                        {
+                            var entry = cache[sourcePath].Entries[candidate];
+                                hash = Utils.CalculateSha256(entry.Uncompress());
+                        }
 
                         if (hashedFiles.ContainsKey(hash))
-                            hashedFiles[hash].Add(candidate);
+                            hashedFiles[hash].Add(candidate, sourcePath);
                         else
-                            hashedFiles.Add(hash, new List<(string, string)>() { candidate });
-                        }
-                    else //Is HPI archive
-                        using (var archive = new HpiArchive(System.IO.File.OpenRead(candidate.Item1)))
-                        {
-                            var entry = archive.Entries[candidate.Item2];
-                            string hash;
+                            hashedFiles.Add(hash, new FilePathCollection(candidate, sourcePath));
+                    }
+                    
 
-                            using (SHA256 sha256Hash = SHA256.Create())
-                                hash = BitConverter.ToString(sha256Hash.ComputeHash(entry.Uncompress()));
-
-                            if (hashedFiles.ContainsKey(hash))
-                                hashedFiles[hash].Add(candidate);
-                            else
-                                hashedFiles.Add(hash, new List<(string, string)>() { candidate });
-                        }
-
-            var duplicateResults = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            var duplicateResults = new SortedDictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
             foreach (var hash in hashedFiles.Keys)
                 if (hashedFiles[hash].Count > 1)
                 {
                     string first = string.Empty;
-                    foreach (var file in hashedFiles[hash])
+                    foreach (var file in hashedFiles[hash].Keys)
                         if (first == string.Empty)
-                            first = file.Item2;
+                            first = file;
                         else
-                            if(!duplicateResults.ContainsKey(file.Item2))
-                            duplicateResults.Add(file.Item2, first);
+                            if(!duplicateResults.ContainsKey(file))
+                            duplicateResults.Add(file, first);
                 }
 
             return duplicateResults;
@@ -184,7 +176,7 @@ namespace HPIZ
 
 
         
-        private static void WriteToFile(string destinationArchiveFileName, SortedDictionary<string, FileEntry> entries, Dictionary<string, string> duplicates)
+        private static void WriteToFile(string destinationArchiveFileName, SortedDictionary<string, FileEntry> entries, SortedDictionary<string, string> duplicates)
         {
             var tree = new DirectoryNode();
             foreach (var fileName in entries.Keys)
@@ -198,22 +190,23 @@ namespace HPIZ
 
                 foreach (var file in entries)
                 {
+                    
                     if (!duplicates.ContainsKey(file.Key))
                     {
                         if (chunkWriter.BaseStream.Position > uint.MaxValue)
                             throw new Exception("Maximum allowed archive size is 4GB (4 294 967 295 bytes).");
 
-                        file.Value.OffsetOfCompressedData = (uint)chunkWriter.BaseStream.Position;
+                        file.Value.CompressedDataOffset = (uint)chunkWriter.BaseStream.Position;
 
                         if (file.Value.FlagCompression != CompressionMethod.StoreUncompressed)
-                            foreach (var size in file.Value.compressedChunkSizes)
+                            foreach (var size in file.Value.CompressedChunkSizes)
                                 chunkWriter.Write(size);
 
                         foreach (var chunk in file.Value.ChunkBytes)
                             chunk.WriteTo(chunkWriter.BaseStream);
                     }
                     else
-                        file.Value.OffsetOfCompressedData = entries[duplicates[file.Key]].OffsetOfCompressedData;
+                        file.Value.CompressedDataOffset = entries[duplicates[file.Key]].CompressedDataOffset;
                 }
                 string mandatoryEndString = String.Format("Copyright {0} Cavedog Entertainment", DateTime.Now.Year);
                 chunkWriter.Write(System.Text.Encoding.GetEncoding(437).GetBytes(mandatoryEndString));

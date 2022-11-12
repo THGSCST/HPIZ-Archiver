@@ -25,7 +25,7 @@ namespace HPIZArchiver
         public static string CalculateSha256(string filename)
         {
             using (SHA256 mySHA256 = SHA256.Create())
-                return BitConverter.ToString(mySHA256.ComputeHash(File.Open(filename, FileMode.Open))).ToLower().Replace("-", string.Empty);
+                return BitConverter.ToString(mySHA256.ComputeHash(File.Open(filename, FileMode.Open, FileAccess.Read, FileShare.Read))).ToLower().Replace("-", string.Empty);
         }
 
         public static string CalculateSha256(byte[] data)

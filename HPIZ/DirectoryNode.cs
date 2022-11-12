@@ -6,10 +6,10 @@ namespace HPIZ
 {
     public class DirectoryNode
     {
-        public SortedDictionary<string, DirectoryNode> Children { get; set; }
+        public Dictionary<string, DirectoryNode> Children { get; set; }
         public DirectoryNode()
         {
-            Children = new SortedDictionary<string, DirectoryNode>(StringComparer.OrdinalIgnoreCase);
+            Children = new Dictionary<string, DirectoryNode>();
         }
 
         public void AddEntry(string entry)

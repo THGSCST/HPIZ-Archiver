@@ -19,6 +19,6 @@
     <Compile Include="$(MSBuildThisFileDirectory)HpiArchive.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)HpiFile.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Compression\ZopfliDeflater.cs" />
-    <Compile Include="$(MSBuildThisFileDirectory)PathCollection.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)FilePathCollection.cs" />
   </ItemGroup>
 </Project>
