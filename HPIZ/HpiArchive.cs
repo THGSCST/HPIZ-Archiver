@@ -5,7 +5,6 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text;
-using System.Threading.Tasks;
 
 namespace HPIZ
 {
@@ -49,7 +48,7 @@ namespace HPIZ
             if (obfuscationKey != 0)
             {
                 obfuscationKey = ~(obfuscationKey << 2 | obfuscationKey >> 6);
-                
+
                 archiveReader.BaseStream.Position = 0;
                 var buffer = archiveReader.ReadBytes(directorySize);
                 Clarify(buffer, 0);
@@ -77,7 +76,7 @@ namespace HPIZ
                     var buffer = archiveReader.ReadBytes(chunkCount * 4);
 
                     if (obfuscationKey != 0)
-                        Clarify(buffer, (int) entriesDictionary[entry].CompressedDataOffset);
+                        Clarify(buffer, (int)entriesDictionary[entry].CompressedDataOffset);
 
                     var size = new int[chunkCount];
                     Buffer.BlockCopy(buffer, 0, size, 0, buffer.Length);
@@ -107,7 +106,7 @@ namespace HPIZ
             }
         }
 
-        internal static void SetEntries(DirectoryNode node, BinaryWriter bw, IEnumerator<FileEntry> sequence)
+        internal static void SetEntries(DirectoryNode node, BinaryWriter bw, SortedDictionary<string, FileEntry>.Enumerator sequence)
         {
             bw.Write(node.Children.Count); //Root Entries number in directory
             bw.Write((int)bw.BaseStream.Position + 4); //Entries Offset point to next
@@ -137,9 +136,12 @@ namespace HPIZ
                 {
                     sequence.MoveNext();
 
-                    bw.Write(sequence.Current.CompressedDataOffset); //OffsetOfData
-                    bw.Write(sequence.Current.UncompressedSize); //UncompressedSize 
-                    bw.Write((byte)sequence.Current.FlagCompression); //FlagCompression 
+                    Debug.Assert(sequence.Current.Value.CompressedDataOffset != 0);
+                    Debug.Assert(sequence.Current.Key.EndsWith(item.Key, StringComparison.OrdinalIgnoreCase));
+
+                    bw.Write(sequence.Current.Value.CompressedDataOffset); //OffsetOfData
+                    bw.Write(sequence.Current.Value.UncompressedSize); //UncompressedSize 
+                    bw.Write((byte)sequence.Current.Value.FlagCompression); //FlagCompression 
 
                 }
                 bw.BaseStream.Position = previousPos;
@@ -159,11 +161,11 @@ namespace HPIZ
 
             var characters = Encoding.GetEncoding(437).GetChars(bytes.ToArray());
 
-            char[] reserved = { '<', '>', '\"', ':', '/', '\\', '|', '?' , '*',};
- 
+            char[] reserved = { '<', '>', '\"', ':', '/', '\\', '|', '?', '*', };
+
             for (int i = 0; i < characters.Length; i++)
                 if (char.IsControl(characters[i]) || reserved.Contains(characters[i]))
-                        characters[i] = '_'; //Replace control or reserved char with underscore
+                    characters[i] = '_'; //Replace control or reserved char with underscore
 
             return new string(characters);
         }
@@ -181,7 +183,7 @@ namespace HPIZ
             else end = end + start;
             for (int i = start; i < end; ++i)
             {
-                unchecked { obfuscatedBytes[i] = (byte) ~(position ^ obfuscationKey ^ obfuscatedBytes[i]); }
+                unchecked { obfuscatedBytes[i] = (byte)~(position ^ obfuscationKey ^ obfuscatedBytes[i]); }
                 position++;
             }
         }

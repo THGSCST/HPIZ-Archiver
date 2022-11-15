@@ -30,7 +30,7 @@ namespace HPIZArchiver
 
         public static string CalculateSha256(byte[] data)
         {
-                return BitConverter.ToString(mySHA256.ComputeHash(data)).ToLower().Replace("-", string.Empty);
+            return BitConverter.ToString(mySHA256.ComputeHash(data)).ToLower().Replace("-", string.Empty);
         }
     }
 }

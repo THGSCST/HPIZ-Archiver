@@ -11,7 +11,7 @@ using static System.Windows.Forms.VisualStyles.VisualStyleElement;
 namespace HPIZ
 {
     public class FilePathCollection : SortedList<string, string>
-    { 
+    {
 
         public FilePathCollection() : base(StringComparer.OrdinalIgnoreCase) { }
 
@@ -30,7 +30,7 @@ namespace HPIZ
 
         public void AddOrReplace(string filePath, string sourcePath)
         {
-            if(this.ContainsKey(filePath))
+            if (this.ContainsKey(filePath))
                 this[filePath] = sourcePath;
             else
                 this.Add(filePath, sourcePath);

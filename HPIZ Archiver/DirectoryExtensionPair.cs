@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace HPIZArchiver
 {
-     static class DirectoryExtensionPair
+    static class DirectoryExtensionPair
     {
         static readonly Dictionary<string, string[]> folderExtensionPairs = new Dictionary<string, string[]>()
         {
@@ -49,7 +49,7 @@ namespace HPIZArchiver
         {
             path = path.ToLower();
             foreach (var folder in folderExtensionPairs.Keys)
-                if(path.StartsWith(folder,StringComparison.OrdinalIgnoreCase))
+                if (path.StartsWith(folder, StringComparison.OrdinalIgnoreCase))
                     switch (path.Replace(folder, string.Empty).Split('\\').Length)
                     {
                         case 4:

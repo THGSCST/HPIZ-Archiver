@@ -1,15 +1,14 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
 
 namespace HPIZ
 {
     public class DirectoryNode
     {
-        public Dictionary<string, DirectoryNode> Children { get; set; }
+        internal Dictionary<string, DirectoryNode> Children { get; set; }
         public DirectoryNode()
         {
-            Children = new Dictionary<string, DirectoryNode>();
+            Children = new Dictionary<string, DirectoryNode>(StringComparer.OrdinalIgnoreCase);
         }
 
         public void AddEntry(string entry)

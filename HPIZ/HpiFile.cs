@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -26,25 +27,25 @@ namespace HPIZ
             foreach (var filePath in archivesFiles.Keys)
             {
                 //int progressLimiter = (fileList.Count - 1) / 100 + 1; //Reduce progress calls
-                    string fullName = destinationPath + "\\" + filePath;
-                    Directory.CreateDirectory(Path.GetDirectoryName(fullName));
+                string fullName = destinationPath + "\\" + filePath;
+                Directory.CreateDirectory(Path.GetDirectoryName(fullName));
 
 
-                    System.Diagnostics.Debug.WriteLine(filePath);
+                System.Diagnostics.Debug.WriteLine(filePath);
 
                 var source = archivesFiles[filePath];
 
-                    if (cache != null)
-                        File.WriteAllBytes(fullName, cache[source].Entries[filePath].Uncompress());
-                    else
-                        using (var archive = new HpiArchive(File.OpenRead(source)))
-                            File.WriteAllBytes(fullName, archive.Entries[filePath].Uncompress());
+                if (cache != null)
+                    File.WriteAllBytes(fullName, cache[source].Entries[filePath].Uncompress());
+                else
+                    using (var archive = new HpiArchive(File.OpenRead(source)))
+                        File.WriteAllBytes(fullName, archive.Entries[filePath].Uncompress());
 
-                    System.Diagnostics.Debug.WriteLine("DONE: " + filePath);
+                System.Diagnostics.Debug.WriteLine("DONE: " + filePath);
 
-                    //Report progress
-                    if (progress != null) //&& i % progressLimiter == 0)
-                        progress.Report(filePath);
+                //Report progress
+                if (progress != null) //&& i % progressLimiter == 0)
+                    progress.Report(filePath);
             }
         }
 
@@ -57,7 +58,7 @@ namespace HPIZ
 
         public static void CreateFromManySources(FilePathCollection sources, string destinationArchiveFileName, CompressionMethod flavor, IProgress<string> progress, Dictionary<string, HpiArchive> cache = null, SortedDictionary<string, string> duplicates = null)
         {
-            if(duplicates == null)
+            if (duplicates == null)
                 duplicates = FindDuplicateContent(sources, cache);
 
             var files = new SortedDictionary<string, FileEntry>(StringComparer.OrdinalIgnoreCase);
@@ -67,29 +68,29 @@ namespace HPIZ
                 var sourcePath = sources[filePath];
                 //Check if source path is a directory or HPI archive
                 if (Directory.Exists(sourcePath))
-                    {
-                        string fullName = Path.Combine(sourcePath, filePath);
-                        var file = new FileInfo(fullName);
-                        if (file.Length > Int32.MaxValue)
-                            throw new Exception("File is too large: " + filePath + ". Maximum allowed size is 2GBytes.");
-                        byte[] buffer = File.ReadAllBytes(fullName);
-                        files.Add(filePath, new FileEntry(buffer, flavor, fullName, progress));
-                    }
+                {
+                    string fullName = Path.Combine(sourcePath, filePath);
+                    var file = new FileInfo(fullName);
+                    if (file.Length > Int32.MaxValue)
+                        throw new Exception("File is too large: " + filePath + ". Maximum allowed size is 2GBytes.");
+                    byte[] buffer = File.ReadAllBytes(fullName);
+                    files.Add(filePath, new FileEntry(buffer, flavor, fullName, progress));
+                }
                 else //Is HPI archive
-                    {
-                        byte[] buffer;
+                {
+                    byte[] buffer;
 
-                        if(cache != null)
-                            buffer = cache[sourcePath].Entries[filePath].Uncompress();
-                        else
-                            using (var archive = new HpiArchive(File.OpenRead(sourcePath)))
-                                buffer = archive.Entries[filePath].Uncompress();
+                    if (cache != null)
+                        buffer = cache[sourcePath].Entries[filePath].Uncompress();
+                    else
+                        using (var archive = new HpiArchive(File.OpenRead(sourcePath)))
+                            buffer = archive.Entries[filePath].Uncompress();
 
-                            files.Add(filePath, new FileEntry(buffer, flavor, filePath, progress));
-                    }
+                    files.Add(filePath, new FileEntry(buffer, flavor, filePath, progress));
+                }
             }
 
-            if(cache != null)
+            if (cache != null)
                 foreach (var archive in cache)
                     archive.Value.Dispose();
 
@@ -111,7 +112,7 @@ namespace HPIZ
                 if (Directory.Exists(sourcePath))
                 {
                     string fullName = Path.Combine(sourcePath, filePath);
-                     fileSize = new FileInfo(fullName).Length;
+                    fileSize = new FileInfo(fullName).Length;
                 }
                 else //Is HPI archive
                 {
@@ -120,7 +121,7 @@ namespace HPIZ
 
                     Debug.WriteLine(sourcePath + filePath);
 
-                     fileSize = cache[sourcePath].Entries[filePath].UncompressedSize;
+                    fileSize = cache[sourcePath].Entries[filePath].UncompressedSize;
                 }
                 if (toHashCandidates.ContainsKey(fileSize))
                     toHashCandidates[fileSize].Add(filePath, sourcePath);
@@ -132,8 +133,8 @@ namespace HPIZ
             var hashedFiles = new Dictionary<string, FilePathCollection>(StringComparer.OrdinalIgnoreCase);
 
             foreach (var fileList in toHashCandidates.Values)
-                if(fileList.Count > 1)
-                foreach (var candidate in fileList.Keys)
+                if (fileList.Count > 1)
+                    foreach (var candidate in fileList.Keys)
                     {
                         var sourcePath = fileList[candidate];
                         string hash;
@@ -147,7 +148,7 @@ namespace HPIZ
                         else //Is HPI archive
                         {
                             var entry = cache[sourcePath].Entries[candidate];
-                                hash = Utils.CalculateSha256(entry.Uncompress());
+                            hash = Utils.CalculateSha256(entry.Uncompress());
                         }
 
                         if (hashedFiles.ContainsKey(hash))
@@ -155,7 +156,7 @@ namespace HPIZ
                         else
                             hashedFiles.Add(hash, new FilePathCollection(candidate, sourcePath));
                     }
-                    
+
 
             var duplicateResults = new SortedDictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
@@ -167,7 +168,7 @@ namespace HPIZ
                         if (first == string.Empty)
                             first = file;
                         else
-                            if(!duplicateResults.ContainsKey(file))
+                            if (!duplicateResults.ContainsKey(file))
                             duplicateResults.Add(file, first);
                 }
 
@@ -175,7 +176,7 @@ namespace HPIZ
         }
 
 
-        
+
         private static void WriteToFile(string destinationArchiveFileName, SortedDictionary<string, FileEntry> entries, SortedDictionary<string, string> duplicates)
         {
             var tree = new DirectoryNode();
@@ -190,7 +191,6 @@ namespace HPIZ
 
                 foreach (var file in entries)
                 {
-                    
                     if (!duplicates.ContainsKey(file.Key))
                     {
                         if (chunkWriter.BaseStream.Position > uint.MaxValue)
@@ -205,9 +205,13 @@ namespace HPIZ
                         foreach (var chunk in file.Value.ChunkBytes)
                             chunk.WriteTo(chunkWriter.BaseStream);
                     }
-                    else
-                        file.Value.CompressedDataOffset = entries[duplicates[file.Key]].CompressedDataOffset;
                 }
+
+                foreach (var duplicate in duplicates)
+                {
+                    entries[duplicate.Key].CompressedDataOffset = entries[duplicate.Value].CompressedDataOffset;
+                }
+
                 string mandatoryEndString = String.Format("Copyright {0} Cavedog Entertainment", DateTime.Now.Year);
                 chunkWriter.Write(System.Text.Encoding.GetEncoding(437).GetBytes(mandatoryEndString));
 
@@ -219,14 +223,14 @@ namespace HPIZ
                 headerWriter.Write(HpiArchive.NoObfuscationKey);
                 headerWriter.Write(HpiArchive.HeaderSize); //Directory Start
 
-                IEnumerator<FileEntry> sequence = entries.Values.ToList().GetEnumerator();
+                SortedDictionary<string, FileEntry>.Enumerator sequence = entries.GetEnumerator();
                 HpiArchive.SetEntries(tree, headerWriter, sequence);
 
                 fileStream.Position = 0;
                 headerWriter.BaseStream.Position = 0;
                 headerWriter.BaseStream.CopyTo(fileStream);
 
-                if(fileStream.Length > Int32.MaxValue)
+                if (fileStream.Length > Int32.MaxValue)
                     MessageBox.Show("The HPI file was created, but its size exceeds 2GB (2 147 483 647 bytes). A fatal error may occur when loading the game.", "Oversize Warning", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
 

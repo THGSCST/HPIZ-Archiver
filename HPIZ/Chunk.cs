@@ -25,8 +25,8 @@ namespace HPIZ
             BinaryWriter writer = new BinaryWriter(output);
 
             writer.BaseStream.Position = OverheadSize;
-            writer.Write((byte) 0x78); //ZLib header first byte
-            writer.Write((byte) 0xDA); //ZLib header second byte
+            writer.Write((byte)0x78); //ZLib header first byte
+            writer.Write((byte)0xDA); //ZLib header second byte
 
             switch (flavor)
             {
@@ -39,7 +39,7 @@ namespace HPIZ
                 case CompressionMethod.i10ZopfliDeflate:
                 case CompressionMethod.i15ZopfliDeflate:
 
-                    if(bytesToCompress.Length < Strategy.ZopfliBreakEven) //Skip Zopfli if chunk is small
+                    if (bytesToCompress.Length < Strategy.ZopfliBreakEven) //Skip Zopfli if chunk is small
                         goto case CompressionMethod.ZLibDeflate;
 
                     ZopfliDeflater zstream = new ZopfliDeflater(output);
@@ -56,20 +56,20 @@ namespace HPIZ
             }
 
             WriteAdler32(bytesToCompress, output);
-            
+
             output.Position = 0;
             writer.Write(Chunk.Header);
             writer.Write(Chunk.DefaultVersion);
             writer.Write((byte)CompressionMethod.ZLibDeflate);
             writer.Write(NoObfuscation);
-            writer.Write((int) output.Length - OverheadSize);
+            writer.Write((int)output.Length - OverheadSize);
             writer.Write(bytesToCompress.Length);
 
             output.Position = OverheadSize;
             int checksum = ComputeChecksum(output);
             output.Position = 15;
             writer.Write(checksum);
-            
+
             return output;
         }
 

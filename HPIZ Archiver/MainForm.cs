@@ -5,7 +5,6 @@ using System.Diagnostics;
 using System.Drawing;
 using System.IO;
 using System.Linq;
-using System.Security.Policy;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 
@@ -52,7 +51,7 @@ namespace HPIZArchiver
             compressCheckedFilesToolStripMenuItem.Enabled = mode == ArchiverMode.Dir;
             mergeRepackCheckedFilesToolStripMenuItem.Enabled = mode == ArchiverMode.File;
             closeAllToolStripMenuItem.Enabled = mode != ArchiverMode.Busy && mode != ArchiverMode.Empty;
-            listViewFiles.Enabled = ! (mode == ArchiverMode.Busy || mode == ArchiverMode.Finish);
+            listViewFiles.Enabled = !(mode == ArchiverMode.Busy || mode == ArchiverMode.Finish);
             toolStrip.Enabled = mode != ArchiverMode.Busy;
             progressBar.Visible = mode == ArchiverMode.Busy || mode == ArchiverMode.Finish;
         }
@@ -97,24 +96,24 @@ namespace HPIZArchiver
             }
 
             foreach (ListViewGroup group in listViewFiles.Groups)
-                    foreach (var candidate in toHashCandidates.Values)
-                        if (candidate.Count > 1 && candidate[0].Group == group && candidate[0].SubItems[8].Text == string.Empty)
-                        {
-                            if (Directory.Exists(group.Name))
-                                candidate[0].SubItems[8].Text = Utils.CalculateSha256( Path.Combine(group.Name, candidate[0].SubItems[1].Text) );
-                            else
-                                candidate[0].SubItems[8].Text = Utils.CalculateSha256(cachedHPI[group.Name].Entries[candidate[0].SubItems[1].Text].Uncompress());
-                            if (sameContent.ContainsKey(candidate[0].SubItems[8].Text))
-                                sameContent[candidate[0].SubItems[8].Text].Add(candidate[0]);
-                            else sameContent.Add(candidate[0].SubItems[8].Text, new List<ListViewItem>() { candidate[0] });
-                        }
+                foreach (var candidate in toHashCandidates.Values)
+                    if (candidate.Count > 1 && candidate[0].Group == group && candidate[0].SubItems[8].Text == string.Empty)
+                    {
+                        if (Directory.Exists(group.Name))
+                            candidate[0].SubItems[8].Text = Utils.CalculateSha256(Path.Combine(group.Name, candidate[0].SubItems[1].Text));
+                        else
+                            candidate[0].SubItems[8].Text = Utils.CalculateSha256(cachedHPI[group.Name].Entries[candidate[0].SubItems[1].Text].Uncompress());
+                        if (sameContent.ContainsKey(candidate[0].SubItems[8].Text))
+                            sameContent[candidate[0].SubItems[8].Text].Add(candidate[0]);
+                        else sameContent.Add(candidate[0].SubItems[8].Text, new List<ListViewItem>() { candidate[0] });
+                    }
 
             SetRule(dRules);
             SetHighliths();
             showHideColumns();
             listViewFiles.EndUpdate();
         }
-        
+
         internal void UpdateStatusBarInfo()
         {
             firstStatusLabel.Text = "Total: " + listViewFiles.Items.Count.ToString() + " file(s); " + Utils.SizeSuffix(totalSize);
@@ -145,12 +144,14 @@ namespace HPIZArchiver
                 firstStatusLabel.Text = "Loading file list from selected HPI file(s)...";
 
                 string[] extensionOrder = { ".GP3", ".CCX", ".UFO", ".HPI" }; //File load order
-                var orderedList = dialogOpenHpi.FileNames.OrderBy(x => {
+                var orderedList = dialogOpenHpi.FileNames.OrderBy(x =>
+                {
                     var index = Array.IndexOf(extensionOrder, Path.GetExtension(x).ToUpper());
-                    return index < 0 ? int.MaxValue : index; }).ToList();
+                    return index < 0 ? int.MaxValue : index;
+                }).ToList();
 
                 foreach (var file in orderedList)
-                    if(!uniqueSources.Contains(file))
+                    if (!uniqueSources.Contains(file))
                     {
                         uniqueSources.Add(file);
                         cachedHPI.Add(file, HpiFile.Open(file));
@@ -223,17 +224,17 @@ namespace HPIZArchiver
                         var hash = Utils.CalculateSha256(file);
                         lvItem.SubItems[8].Text = hash;
 
-                        if(!sha256ToolStripMenuItem.Checked)
+                        if (!sha256ToolStripMenuItem.Checked)
                             toHashCandidates[size].Add(lvItem);
 
                         if (sameContent.ContainsKey(hash))
                             sameContent[hash].Add(lvItem);
-                        else sameContent.Add(hash, new List<ListViewItem>() { lvItem } ) ;
+                        else sameContent.Add(hash, new List<ListViewItem>() { lvItem });
                     }
                     else
                         toHashCandidates.Add(size, new List<ListViewItem>() { lvItem });
-                }   
-                            
+                }
+
             }
             else //HPI Files
             {
@@ -263,12 +264,14 @@ namespace HPIZArchiver
                     lvItem.Tag = fullPath;
                     listColection.Add(lvItem);
 
+                    Debug.WriteLine(entry.Key + entry.Value.CompressedDataOffset.ToString());
+
                     if (sha256ToolStripMenuItem.Checked || toHashCandidates.ContainsKey(entry.Value.UncompressedSize))
                     {
                         var hash = Utils.CalculateSha256(entry.Value.Uncompress());
                         lvItem.SubItems[8].Text = hash;
 
-                        if(!sha256ToolStripMenuItem.Checked)
+                        if (!sha256ToolStripMenuItem.Checked)
                             toHashCandidates[entry.Value.UncompressedSize].Add(lvItem);
 
                         if (sameContent.ContainsKey(hash))
@@ -359,20 +362,18 @@ namespace HPIZArchiver
                     string first = string.Empty;
                     SortedSet<string> orderedSames = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
                     foreach (var item in sames)
-                        if(item.Checked == true)
-                        orderedSames.Add(item.SubItems[1].Text);
+                        if (item.Checked == true)
+                            orderedSames.Add(item.SubItems[1].Text);
 
                     foreach (var item in orderedSames)
                         if (first == string.Empty)
                             first = item;
                         else if (!duplicateResults.ContainsKey(item))
-                                duplicateResults.Add(item, first);
+                            duplicateResults.Add(item, first);
                 }
 
 
-                duplicateResults = null;
-
-            timer.Restart();
+                timer.Restart();
 
                 await Task.Run(() => HpiFile.CreateFromManySources(sources, dialogSaveHpi.FileName, flavor, progress, cachedHPI, duplicateResults));
 
@@ -426,7 +427,7 @@ namespace HPIZArchiver
         {
             if (listViewFiles.Items.Count > 0 && listViewFiles.Items[0].SubItems.Count > e.Column)
             {
-                if(listViewFiles.Tag.Equals("D"))
+                if (listViewFiles.Tag.Equals("D"))
                 {
                     if (e.Column == 0) listViewFiles.ListViewItemSorter = new ListViewItemCheckComparerAsc(e.Column);
                     if (e.Column == 1 || e.Column == 2 || e.Column == 6 || e.Column == 7 || e.Column == 8) listViewFiles.ListViewItemSorter = new ListViewItemStringComparerAsc(e.Column);
@@ -475,11 +476,11 @@ namespace HPIZArchiver
                 case DuplicateRules.NoDuplicates:
                     foreach (var item in uniqueNames)
                     {
-                        if(item.Value.Count == 1)
+                        if (item.Value.Count == 1)
                             item.Value.First().Checked = true;
                         else
-                        for (int i = 0; i < item.Value.Count; i++)
-                            item.Value[i].Checked = false;
+                            for (int i = 0; i < item.Value.Count; i++)
+                                item.Value[i].Checked = false;
                     }
                     break;
             }
@@ -507,7 +508,7 @@ namespace HPIZArchiver
 
         private void secondStatusLabel_Click(object sender, EventArgs e)
         {
-            if(secondStatusLabel.IsLink)
+            if (secondStatusLabel.IsLink)
                 Process.Start("explorer.exe", "/select," + secondStatusLabel.Text);
         }
 
@@ -547,25 +548,25 @@ namespace HPIZArchiver
                             item.BackColor = duplicateNamesinYellowStripMenuItem.BackColor;
                         else item.BackColor = default(Color);
 
-                foreach (var ocurrence in sameContent.Values)
-                    if (ocurrence.Count > 1)
-                        foreach (var item in ocurrence)
-                            if (duplicateNameContentToolStripMenuItem.Checked)
-                                if (item.BackColor == duplicateNamesinYellowStripMenuItem.BackColor)
-                                    item.BackColor = duplicateNameContentToolStripMenuItem.BackColor;
-                                else if(duplicateContentsToolStripMenuItem.Checked)
-                                    item.BackColor = duplicateContentsToolStripMenuItem.BackColor;
-                else if(item.BackColor == duplicateContentsToolStripMenuItem.BackColor)
+            foreach (var ocurrence in sameContent.Values)
+                if (ocurrence.Count > 1)
+                    foreach (var item in ocurrence)
+                        if (duplicateNameContentToolStripMenuItem.Checked)
+                            if (item.BackColor == duplicateNamesinYellowStripMenuItem.BackColor)
+                                item.BackColor = duplicateNameContentToolStripMenuItem.BackColor;
+                            else if (duplicateContentsToolStripMenuItem.Checked)
+                                item.BackColor = duplicateContentsToolStripMenuItem.BackColor;
+                            else if (item.BackColor == duplicateContentsToolStripMenuItem.BackColor)
                                 item.BackColor = default(Color);
-                            else if(item.BackColor == duplicateNameContentToolStripMenuItem.BackColor)
+                            else if (item.BackColor == duplicateNameContentToolStripMenuItem.BackColor)
                                 item.BackColor = default(Color);
 
 
             foreach (ListViewItem item in listViewFiles.Items)
-                    if (!DirectoryExtensionPair.IsDirectoryExtensionKnow(item.SubItems[1].Text))
+                if (!DirectoryExtensionPair.IsDirectoryExtensionKnow(item.SubItems[1].Text))
                     if (unknowFoldersExtensionToolStripMenuItem.Checked)
                         item.BackColor = unknowFoldersExtensionToolStripMenuItem.BackColor;
-                else if (item.BackColor == unknowFoldersExtensionToolStripMenuItem.BackColor)
+                    else if (item.BackColor == unknowFoldersExtensionToolStripMenuItem.BackColor)
                         item.BackColor = default(Color);
         }
     }
