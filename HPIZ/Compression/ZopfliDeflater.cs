@@ -1,27 +1,23 @@
-﻿/**************************************************************************
- * Orginal Version
- * Copyright 2011 Google Inc. All Rights Reserved.
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
- * Author: lode.vandevenne@gmail.com (Lode Vandevenne)
- * Author: jyrki.alakuijala@gmail.com (Jyrki Alakuijala)
-**************************************************************************
- * Adapted and ported to C# in 2014 by Steven Giacomelli (stevegiacomelli@gmail.com)
-************************************************************************** */
+﻿/*
+Copyright 2011 Google Inc. All Rights Reserved.
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+Author: lode.vandevenne@gmail.com (Lode Vandevenne)
+Author: jyrki.alakuijala@gmail.com (Jyrki Alakuijala)
+*/
 
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -606,97 +602,49 @@ namespace CompressSharper.Zopfli
         private sealed class Node
         {
             private int _count;
-            private readonly int _id;
-            private bool _inUse;
-            private Node _tail;
             private int _weight;
+            private Node _tail;
 
-            private Node(int id)
-            {
-                _weight = 0;
-                _count = 0;
-                _tail = null;
-                _inUse = false;
-                _id = id;
-            }
+            private Node() { }
 
             private Node(int weight, int count, Node tail)
             {
                 _weight = weight;
                 _count = count;
                 _tail = tail;
-                _inUse = true;
             }
 
             #region NodePool
 
             private class NodePool
             {
-                private Stack<Node> _freeNodes;
-
+                static ConcurrentQueue<Node[]> _freePool = new ConcurrentQueue<Node[]>();
+                private int _unusedNode;
                 private Node[] _pool;
 
                 public NodePool(int size)
                 {
-                    _pool = new Node[size];
-                    _freeNodes = new Stack<Node>(size);
-
-                    for (int i = 0; i < size; i++)
-                    {
-                        _pool[i] = new Node(i);
-                        _freeNodes.Push(_pool[i]);
+                    _unusedNode = 0;
+                    if (! _freePool.TryDequeue(out _pool))
+                    { 
+                        _pool = new Node[size];
+                        for (int i = 0; i < size; i++)
+                            _pool[i] = new Node();
                     }
                 }
 
-                public Node CreateNew(int weight, int count, Node tail, Node[][] lists)
+                public void ReturnPool()
                 {
-                    //if we can find a new one right away
-                    if (_freeNodes.Count > 0)
-                    {
-                        Node ret = _freeNodes.Pop();
+                    _freePool.Enqueue(_pool);
+                }
+
+                public Node CreateNew(int weight, int count, Node tail)
+                {
+                    Node ret = _pool[_unusedNode++];
                         ret._weight = weight;
                         ret._count = count;
                         ret._tail = tail;
-                        ret._inUse = true;
                         return ret;
-                    }
-
-                    //otherwise assume they are all not in use
-                    for (int i = 0; i < _pool.Length; i++)
-                    {
-                        _pool[i]._inUse = false;
-                    }
-
-                    for (int j = 0; j < lists[0].Length; j++)
-                    {
-                            _pool[lists[0][j]._id]._inUse = true;
-
-                            for (Node n = lists[0][j]._tail; n != null; n = n._tail)
-                            {
-                                    _pool[n._id]._inUse = true;
-                            }
-                    }
-
-                    for (int j = 0; j < lists[1].Length; j++)
-                    {
-                            _pool[lists[1][j]._id]._inUse = true;
-
-                            for (Node n = lists[1][j]._tail; n != null; n = n._tail)
-                            {
-                                    _pool[n._id]._inUse = true;
-                            }
-                        
-                    }
-
-                    for (int i = 0; i < _pool.Length; i++)
-                    {
-                        if (!_pool[i]._inUse)
-                        {
-                            _freeNodes.Push(_pool[i]);
-                        }
-                    }
-
-                    return CreateNew(weight, count, tail, lists);
                 }
             }
 
@@ -732,13 +680,17 @@ namespace CompressSharper.Zopfli
                 }
 
                 // Sort the leafList from lightest to heaviest.
-                leafList.Sort((a, b) => a._weight - b._weight);
+                leafList.Sort((a, b) => {
+                    if (a._weight != b._weight) return a._weight.CompareTo(b._weight);
+                    else return a._count.CompareTo(b._count);
+                });
 
-                NodePool pool = new NodePool(2 * maxBits * (maxBits + 1));
+
+                NodePool pool = new NodePool(8580); //maxbits(<=15) * 2 * numsymbols(<=286), the theoretical maximum. This needs about 170kb of memory, but is much faster than a node pool using garbage collection.
 
                 /*Initializes each list with as lookahead chains the two leafList with lowest weights.*/
-                Node node0 = pool.CreateNew(leafList[0]._weight, 1, null, lists);
-                Node node1 = pool.CreateNew(leafList[1]._weight, 2, null, lists);
+                Node node0 = pool.CreateNew(leafList[0]._weight, 1, null);
+                Node node1 = pool.CreateNew(leafList[1]._weight, 2, null);
 
                 for (int i = 0; i < maxBits; i++)
                 {
@@ -756,6 +708,8 @@ namespace CompressSharper.Zopfli
                 }
 
                 ExtractBitLengths(lists[1][maxBits - 1], leafList, ref bitlengths);
+
+                pool.ReturnPool();
             }
 
             /// <summary>
@@ -776,7 +730,7 @@ namespace CompressSharper.Zopfli
                 if (index == 0 && lastcount >= numsymbols)
                     return;
 
-                Node newchain = pool.CreateNew(0, 0, null, lists); //new Node(0, 0, null);
+                Node newchain = pool.CreateNew(0, 0, null); //new Node(0, 0, null);
                 Node oldchain = lists[1][index];
 
                 /* These are set up before the recursive calls below, so that there is a list
