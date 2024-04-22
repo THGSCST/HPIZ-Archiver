@@ -72,7 +72,6 @@
             this.toolStrip = new System.Windows.Forms.ToolStrip();
             this.HighlightsToolStripDropDownButton = new System.Windows.Forms.ToolStripDropDownButton();
             this.unknowFoldersExtensionToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
-            this.toolStripSeparator6 = new System.Windows.Forms.ToolStripSeparator();
             this.duplicateNamesinYellowStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.duplicateContentsToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.duplicateNameContentToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
@@ -87,6 +86,7 @@
             this.columnMethod = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
             this.columnOffset = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
             this.columnSha256 = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
+            this.toolStripSeparator7 = new System.Windows.Forms.ToolStripSeparator();
             this.statusStrip.SuspendLayout();
             this.checkListContextMenu.SuspendLayout();
             this.toolStrip.SuspendLayout();
@@ -290,6 +290,7 @@
             this.toolStripOpenButton.Size = new System.Drawing.Size(59, 56);
             this.toolStripOpenButton.Text = "Open";
             this.toolStripOpenButton.TextImageRelation = System.Windows.Forms.TextImageRelation.ImageAboveText;
+            this.toolStripOpenButton.ToolTipText = "Open a file archive or a directory";
             // 
             // openFilesToolStripMenuItem
             // 
@@ -377,7 +378,7 @@
             this.flavorLevelComboBox.Enabled = false;
             this.flavorLevelComboBox.Name = "flavorLevelComboBox";
             this.flavorLevelComboBox.Size = new System.Drawing.Size(162, 59);
-            this.flavorLevelComboBox.ToolTipText = "Select compression flavor or level. Defaul is i15 Zopfli Deflate.";
+            this.flavorLevelComboBox.ToolTipText = "Select compression level or flavor (defaul is i15 Zopfli Deflate)";
             // 
             // flavorStripLabel
             // 
@@ -458,9 +459,9 @@
             // 
             this.HighlightsToolStripDropDownButton.DropDownItems.AddRange(new System.Windows.Forms.ToolStripItem[] {
             this.unknowFoldersExtensionToolStripMenuItem,
-            this.toolStripSeparator6,
-            this.duplicateNamesinYellowStripMenuItem,
             this.duplicateContentsToolStripMenuItem,
+            this.toolStripSeparator7,
+            this.duplicateNamesinYellowStripMenuItem,
             this.duplicateNameContentToolStripMenuItem});
             this.HighlightsToolStripDropDownButton.Image = global::HPIZArchiver.Properties.Resources.Highlighter_32x;
             this.HighlightsToolStripDropDownButton.ImageScaling = System.Windows.Forms.ToolStripItemImageScaling.None;
@@ -469,6 +470,7 @@
             this.HighlightsToolStripDropDownButton.Size = new System.Drawing.Size(91, 56);
             this.HighlightsToolStripDropDownButton.Text = "Highlights";
             this.HighlightsToolStripDropDownButton.TextImageRelation = System.Windows.Forms.TextImageRelation.ImageAboveText;
+            this.HighlightsToolStripDropDownButton.ToolTipText = "Highlights to visually indicates different types of file statuses";
             // 
             // unknowFoldersExtensionToolStripMenuItem
             // 
@@ -480,12 +482,8 @@
             this.unknowFoldersExtensionToolStripMenuItem.ShowShortcutKeys = false;
             this.unknowFoldersExtensionToolStripMenuItem.Size = new System.Drawing.Size(325, 26);
             this.unknowFoldersExtensionToolStripMenuItem.Text = "Unknow Folders or Extensions in Red";
+            this.unknowFoldersExtensionToolStripMenuItem.ToolTipText = "Highlight folders or file extensions not typically used by the game";
             this.unknowFoldersExtensionToolStripMenuItem.CheckedChanged += new System.EventHandler(this.changeHighLightsToolStripMenuItem_Click);
-            // 
-            // toolStripSeparator6
-            // 
-            this.toolStripSeparator6.Name = "toolStripSeparator6";
-            this.toolStripSeparator6.Size = new System.Drawing.Size(322, 6);
             // 
             // duplicateNamesinYellowStripMenuItem
             // 
@@ -497,6 +495,8 @@
             this.duplicateNamesinYellowStripMenuItem.ShowShortcutKeys = false;
             this.duplicateNamesinYellowStripMenuItem.Size = new System.Drawing.Size(325, 26);
             this.duplicateNamesinYellowStripMenuItem.Text = "Duplicate Names in Yellow";
+            this.duplicateNamesinYellowStripMenuItem.ToolTipText = "Highlight files with identical names but different contents when opening multiple" +
+    " folders or archives\r\n";
             this.duplicateNamesinYellowStripMenuItem.CheckedChanged += new System.EventHandler(this.changeHighLightsToolStripMenuItem_Click);
             // 
             // duplicateContentsToolStripMenuItem
@@ -509,6 +509,7 @@
             this.duplicateContentsToolStripMenuItem.ShowShortcutKeys = false;
             this.duplicateContentsToolStripMenuItem.Size = new System.Drawing.Size(325, 26);
             this.duplicateContentsToolStripMenuItem.Text = "Duplicate Contents in Blue";
+            this.duplicateContentsToolStripMenuItem.ToolTipText = "Highlight duplicate content files with different names using binary comparison\r\n";
             this.duplicateContentsToolStripMenuItem.CheckedChanged += new System.EventHandler(this.changeHighLightsToolStripMenuItem_Click);
             // 
             // duplicateNameContentToolStripMenuItem
@@ -521,6 +522,8 @@
             this.duplicateNameContentToolStripMenuItem.ShowShortcutKeys = false;
             this.duplicateNameContentToolStripMenuItem.Size = new System.Drawing.Size(325, 26);
             this.duplicateNameContentToolStripMenuItem.Text = "Duplicate Name+Content in Green";
+            this.duplicateNameContentToolStripMenuItem.ToolTipText = "Highlight files with identical names and identical contents when opening multiple" +
+    " folders or archives.";
             this.duplicateNameContentToolStripMenuItem.CheckedChanged += new System.EventHandler(this.changeHighLightsToolStripMenuItem_Click);
             // 
             // toolStripSeparator5
@@ -608,6 +611,11 @@
             this.columnSha256.Text = "SHA-256";
             this.columnSha256.Width = 0;
             // 
+            // toolStripSeparator7
+            // 
+            this.toolStripSeparator7.Name = "toolStripSeparator7";
+            this.toolStripSeparator7.Size = new System.Drawing.Size(322, 6);
+            // 
             // MainForm
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(8F, 16F);
@@ -683,12 +691,12 @@
         private System.Windows.Forms.ToolStripDropDownButton HighlightsToolStripDropDownButton;
         private System.Windows.Forms.ToolStripMenuItem duplicateNamesinYellowStripMenuItem;
         private System.Windows.Forms.ToolStripMenuItem duplicateNameContentToolStripMenuItem;
-        private System.Windows.Forms.ToolStripSeparator toolStripSeparator6;
         private System.Windows.Forms.ToolStripMenuItem unknowFoldersExtensionToolStripMenuItem;
         private System.Windows.Forms.ToolStripSeparator toolStripSeparator5;
         private System.Windows.Forms.ColumnHeader columnOffset;
         private System.Windows.Forms.ToolStripMenuItem offsetToolStripMenuItem;
         private System.Windows.Forms.ToolStripMenuItem duplicateContentsToolStripMenuItem;
+        private System.Windows.Forms.ToolStripSeparator toolStripSeparator7;
     }
 }
 

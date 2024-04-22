@@ -179,10 +179,8 @@ namespace HPIZ
 
         private static void WriteToFile(string destinationArchiveFileName, SortedDictionary<string, FileEntry> entries, SortedDictionary<string, string> duplicates)
         {
-            var tree = new DirectoryNode();
-            foreach (var fileName in entries.Keys)
-                tree.AddEntry(fileName);
-            int chunkStartPosition = tree.CalculateSize() + HpiArchive.HeaderSize;
+            DirectoryNode directoryTree = new DirectoryNode(entries.Keys.ToList());
+            int chunkStartPosition = directoryTree.CalculateTreeSize() + HpiArchive.HeaderSize;
 
             using (var fileStream = File.Create(destinationArchiveFileName))
             {
@@ -224,7 +222,7 @@ namespace HPIZ
                 headerWriter.Write(HpiArchive.HeaderSize); //Directory Start
 
                 SortedDictionary<string, FileEntry>.Enumerator sequence = entries.GetEnumerator();
-                HpiArchive.SetEntries(tree, headerWriter, sequence);
+                directoryTree.WriteTree(headerWriter, sequence);
 
                 fileStream.Position = 0;
                 headerWriter.BaseStream.Position = 0;

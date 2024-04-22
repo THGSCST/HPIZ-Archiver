@@ -106,49 +106,6 @@ namespace HPIZ
             }
         }
 
-        internal static void SetEntries(DirectoryNode node, BinaryWriter bw, SortedDictionary<string, FileEntry>.Enumerator sequence)
-        {
-            bw.Write(node.Children.Count); //Root Entries number in directory
-            bw.Write((int)bw.BaseStream.Position + 4); //Entries Offset point to next
-
-            bool first = true;
-            foreach (var item in node.Children)
-            {
-                int posString = (int)bw.BaseStream.Length;
-                if (first)
-                {
-                    first = false;
-                    posString = (int)bw.BaseStream.Position + node.Children.Count * 9;
-                }
-                bw.Write(posString); //NameOffset;      /* points to the file name */
-                int posNext = posString + item.Key.Length + 1;
-                bw.Write(posNext); //DataOffset;   /* points to directory data */
-                bool isDir = item.Value.Children.Count != 0;
-                bw.Write(isDir);
-
-                int previousPos = (int)bw.BaseStream.Position;
-                bw.BaseStream.Position = posString;
-
-                WriteStringCP437NullTerminated(bw, item.Key);
-                if (isDir)
-                    SetEntries(item.Value, bw, sequence);
-                else
-                {
-                    sequence.MoveNext();
-
-                    Debug.Assert(sequence.Current.Value.CompressedDataOffset != 0);
-                    Debug.Assert(sequence.Current.Key.EndsWith(item.Key, StringComparison.OrdinalIgnoreCase));
-
-                    bw.Write(sequence.Current.Value.CompressedDataOffset); //OffsetOfData
-                    bw.Write(sequence.Current.Value.UncompressedSize); //UncompressedSize 
-                    bw.Write((byte)sequence.Current.Value.FlagCompression); //FlagCompression 
-
-                }
-                bw.BaseStream.Position = previousPos;
-            }
-        }
-
-
         private static string ReadStringCP437NullTerminated(BinaryReader reader)
         {
             var bytes = new Queue<byte>();
@@ -170,18 +127,13 @@ namespace HPIZ
             return new string(characters);
         }
 
-        private static void WriteStringCP437NullTerminated(BinaryWriter reader, string text)
-        {
-            Encoding codePage437 = Encoding.GetEncoding(437);
-            reader.Write(codePage437.GetBytes(text));
-            reader.Write(byte.MinValue); //Zero byte to end string
-        }
 
-        internal void Clarify(byte[] obfuscatedBytes, int position, int start = 0, int end = 0)
+
+        internal void Clarify(byte[] obfuscatedBytes, int position, int start = 0, int lenght = 0)
         {
-            if (end == 0) end = obfuscatedBytes.Length;
-            else end = end + start;
-            for (int i = start; i < end; ++i)
+            if (lenght == 0) lenght = obfuscatedBytes.Length;
+            else lenght = lenght + start;
+            for (int i = start; i < lenght; ++i)
             {
                 unchecked { obfuscatedBytes[i] = (byte)~(position ^ obfuscationKey ^ obfuscatedBytes[i]); }
                 position++;

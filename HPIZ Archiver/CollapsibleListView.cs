@@ -7,51 +7,81 @@ namespace HPIZArchiver
 {
     public class CollapsibleListView : ListView
     {
+        // Constants representing specific messages and group state flags
+        private const int LVM_FIRST = 0x1000;
+        private const int LVM_INSERTGROUP = (LVM_FIRST + 145);
+        private const int LVM_SETGROUPINFO = (LVM_FIRST + 147);
         private const int LVGF_STATE = 0x00000004;
         private const int LVGS_COLLAPSIBLE = 0x00000008;
-        private const int LVM_FIRST = 0x1000;
-        private const int LVM_SETGROUPINFO = (LVM_FIRST + 147);
-        private const int LVM_INSERTGROUP = (LVM_FIRST + 145);
         private const int WM_LBUTTONUP = 0x0202;
 
         /// <summary>
-        /// Intercepts <see cref="ListView.WndProc(ref Message)"/> calls
+        /// Intercepts Windows messages to handle group collapsibility and mouse events.
         /// </summary>
-        /// <param name="m">Message</param>
+        /// <param name="m">The Windows Message to process.</param>
         protected override void WndProc(ref Message m)
         {
             switch (m.Msg)
             {
                 case WM_LBUTTONUP:
+                    // Delegates the handling of mouse button up events to the default procedure
                     base.DefWndProc(ref m);
                     break;
                 case LVM_INSERTGROUP:
+                    // Handles insertion of a new group by setting its collapsibility before continuing with the default processing
                     base.WndProc(ref m);
                     var group = (LvGroup)Marshal.PtrToStructure(m.LParam, typeof(LvGroup));
                     SetGroupCollapsible(group.iGroupId);
                     return;
             }
 
+            // Default message processing
             base.WndProc(ref m);
         }
 
         /// <summary>
-        /// Sends the specified message to a window or windows.
-        /// <seealso cref="https://docs.microsoft.com/en-us/windows/desktop/api/winuser/nf-winuser-sendmessage"/>
+        /// Makes a ListViewGroup collapsible by updating its state in the ListView.
         /// </summary>
-        /// <param name="handle">A handle to the window 
-        /// whose window procedure will receive the message.</param>
-        /// <param name="message">The message to be sent.</param>
+        /// <param name="groupItemIndex">Index of the ListViewGroup.</param>
+        private void SetGroupCollapsible(int groupItemIndex)
+        {
+            LvGroup group = new LvGroup
+            {
+                cbSize = Marshal.SizeOf(typeof(LvGroup)),
+                state = LVGS_COLLAPSIBLE,
+                mask = LVGF_STATE,
+                iGroupId = groupItemIndex
+            };
+
+            IntPtr ip = IntPtr.Zero;
+            try
+            {
+                ip = Marshal.AllocHGlobal(group.cbSize);
+                Marshal.StructureToPtr(group, ip, false);
+                SendMessage(Handle, LVM_SETGROUPINFO, groupItemIndex, ip);
+            }
+            finally
+            {
+                if (ip != IntPtr.Zero)
+                {
+                    Marshal.FreeHGlobal(ip);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Sends a message to a window or windows, typically to modify their appearance or behavior.
+        /// </summary>
+        /// <param name="handle">Handle to the window receiving the message.</param>
+        /// <param name="message">Message identifier.</param>
         /// <param name="wParam">Additional message-specific information.</param>
         /// <param name="lParam">Additional message-specific information.</param>
-        /// <returns>The return value specifies the result of the message processing; 
-        /// it depends on the message sent.</returns>
+        /// <returns>Result of the message processing.</returns>
         [DllImport("user32.dll")]
         private static extern int SendMessage(IntPtr handle, int message, int wParam, IntPtr lParam);
 
         /// <summary>
-        /// Represents native version of the <see cref="ListViewGroup"/> class
-        /// <seealso cref="https://docs.microsoft.com/en-us/windows/desktop/api/commctrl/ns-commctrl-taglvgroup"/>
+        /// Struct representing a native ListView group.
         /// </summary>
         [StructLayout(LayoutKind.Sequential)]
         private struct LvGroup
@@ -69,33 +99,6 @@ namespace HPIZArchiver
             public int state;
             public int uAlign;
         }
-
-        /// <summary>
-        /// Updates a <see cref="ListViewGroup"/> item's state within current instance as collapsible
-        /// </summary>
-        /// <param name="groupItemIndex">Group item index</param>
-        private void SetGroupCollapsible(int groupItemIndex)
-        {
-            LvGroup group = new LvGroup();
-            group.cbSize = Marshal.SizeOf(group);
-            group.state = LVGS_COLLAPSIBLE;
-            group.mask = LVGF_STATE;
-            group.iGroupId = groupItemIndex;
-
-            IntPtr ip = IntPtr.Zero;
-            try
-            {
-                ip = Marshal.AllocHGlobal(group.cbSize);
-                Marshal.StructureToPtr(group, ip, false);
-                SendMessage(Handle, LVM_SETGROUPINFO, groupItemIndex, ip);
-            }
-            finally
-            {
-                if (ip != IntPtr.Zero)
-                {
-                    Marshal.FreeHGlobal(ip);
-                }
-            }
-        }
     }
+
 }
