@@ -1,9 +1,9 @@
 ﻿using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Text;
 using System.Windows.Forms;
 using HPIZArchiver;
 
@@ -24,29 +24,42 @@ namespace HPIZ
 
         public static void DoExtraction(FilePathCollection archivesFiles, string destinationPath, IProgress<string> progress, Dictionary<string, HpiArchive> cache = null)
         {
+            bool disposeCacheEntries = false;
+            if (cache == null)
+            {
+                cache = new Dictionary<string, HpiArchive>();
+                disposeCacheEntries = true;
+            }
+
             foreach (var filePath in archivesFiles.Keys)
             {
-                //int progressLimiter = (fileList.Count - 1) / 100 + 1; //Reduce progress calls
-                string fullName = destinationPath + "\\" + filePath;
+                string fullName = Path.Combine(destinationPath, filePath);
                 Directory.CreateDirectory(Path.GetDirectoryName(fullName));
-
-
-                System.Diagnostics.Debug.WriteLine(filePath);
 
                 var source = archivesFiles[filePath];
 
-                if (cache != null)
-                    File.WriteAllBytes(fullName, cache[source].Entries[filePath].Uncompress());
-                else
-                    using (var archive = new HpiArchive(File.OpenRead(source)))
-                        File.WriteAllBytes(fullName, archive.Entries[filePath].Uncompress());
+                HpiArchive archive;
+                if (!cache.TryGetValue(source, out archive))
+                {
+                    archive = new HpiArchive(File.OpenRead(source));
+                    cache.Add(source, archive);
+                }
 
-                System.Diagnostics.Debug.WriteLine("DONE: " + filePath);
-
-                //Report progress
-                if (progress != null) //&& i % progressLimiter == 0)
-                    progress.Report(filePath);
+                try
+                {
+                    File.WriteAllBytes(fullName, archive.Entries[filePath].Uncompress());
+                    progress?.Report(filePath);
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show($"An error occurred while writing the file '{filePath}'.\n\nDetails: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                }
             }
+
+            // Dispose the cache entries if we created the cache
+            if (disposeCacheEntries)
+                foreach (var cachedArchive in cache.Values)
+                    cachedArchive.Dispose();
         }
 
         public static void CreateFromDirectory(string sourceDirectoryFullName, string destinationArchiveFileName, CompressionMethod flavor, IProgress<string> progress)
@@ -70,11 +83,18 @@ namespace HPIZ
                 if (Directory.Exists(sourcePath))
                 {
                     string fullName = Path.Combine(sourcePath, filePath);
-                    var file = new FileInfo(fullName);
-                    if (file.Length > Int32.MaxValue)
-                        throw new Exception("File is too large: " + filePath + ". Maximum allowed size is 2GBytes.");
-                    byte[] buffer = File.ReadAllBytes(fullName);
-                    files.Add(filePath, new FileEntry(buffer, flavor, fullName, progress));
+                    try
+                    {
+                        var file = new FileInfo(fullName);
+                        if (file.Length > Int32.MaxValue)
+                            throw new Exception("File is too large: " + filePath + ". Maximum allowed size is 2GBytes.");
+                        byte[] buffer = File.ReadAllBytes(fullName);
+                        files.Add(filePath, new FileEntry(buffer, flavor, fullName, progress));
+                    }
+                    catch (Exception ex)
+                    {
+                        MessageBox.Show($"An error occurred while reading the file '{fullName}'.\n\nDetails: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    }
                 }
                 else //Is HPI archive
                 {
@@ -176,62 +196,85 @@ namespace HPIZ
         }
 
 
-
         private static void WriteToFile(string destinationArchiveFileName, SortedDictionary<string, FileEntry> entries, SortedDictionary<string, string> duplicates)
         {
+            // Create directory tree and calculate chunk start position
             DirectoryNode directoryTree = new DirectoryNode(entries.Keys.ToList());
             int chunkStartPosition = directoryTree.CalculateTreeSize() + HpiArchive.HeaderSize;
 
-            using (var fileStream = File.Create(destinationArchiveFileName))
+            try
             {
-                BinaryWriter chunkWriter = new BinaryWriter(fileStream);
-                chunkWriter.BaseStream.Position = chunkStartPosition;
-
-                foreach (var file in entries)
+                using (FileStream fileStream = File.Create(destinationArchiveFileName))
+                using (BinaryWriter chunkWriter = new BinaryWriter(fileStream))
                 {
-                    if (!duplicates.ContainsKey(file.Key))
+                    // Set the position for writing chunks
+                    chunkWriter.BaseStream.Position = chunkStartPosition;
+
+                    // Write file entries
+                    foreach (var file in entries)
                     {
-                        if (chunkWriter.BaseStream.Position > uint.MaxValue)
-                            throw new Exception("Maximum allowed archive size is 4GB (4 294 967 295 bytes).");
+                        if (!duplicates.ContainsKey(file.Key))
+                        {
+                            if (chunkWriter.BaseStream.Position > uint.MaxValue)
+                                throw new Exception("Maximum allowed archive size is 4GB (4,294,967,295 bytes).");
 
-                        file.Value.CompressedDataOffset = (uint)chunkWriter.BaseStream.Position;
+                            file.Value.CompressedDataOffset = (uint)chunkWriter.BaseStream.Position;
 
-                        if (file.Value.FlagCompression != CompressionMethod.StoreUncompressed)
-                            foreach (var size in file.Value.CompressedChunkSizes)
-                                chunkWriter.Write(size);
+                            if (file.Value.FlagCompression != CompressionMethod.StoreUncompressed)
+                            {
+                                foreach (var size in file.Value.CompressedChunkSizes)
+                                    chunkWriter.Write(size);
+                            }
 
-                        foreach (var chunk in file.Value.ChunkBytes)
-                            chunk.WriteTo(chunkWriter.BaseStream);
+                            foreach (var chunk in file.Value.ChunkBytes)
+                                chunk.WriteTo(chunkWriter.BaseStream);
+                        }
+                    }
+
+                    // Update duplicate file offsets
+                    foreach (var duplicate in duplicates)
+                    {
+                        entries[duplicate.Key].CompressedDataOffset = entries[duplicate.Value].CompressedDataOffset;
+                    }
+
+                    // Write mandatory end string
+                    string mandatoryEndString = $"Copyright {DateTime.Now.Year} Cavedog Entertainment";
+                    chunkWriter.Write(Encoding.GetEncoding(437).GetBytes(mandatoryEndString));
+
+                    // Write header to a memory stream
+                    using (var headerStream = new MemoryStream())
+                    using (var headerWriter = new BinaryWriter(headerStream))
+                    {
+                        headerWriter.Write(HpiArchive.HeaderMarker);
+                        headerWriter.Write(HpiArchive.DefaultVersion);
+                        headerWriter.Write(chunkStartPosition);
+                        headerWriter.Write(HpiArchive.NoObfuscationKey);
+                        headerWriter.Write(HpiArchive.HeaderSize); // Directory Start
+
+                        var sequence = entries.GetEnumerator();
+                        directoryTree.WriteTree(headerWriter, sequence);
+
+                        // Copy header to the beginning of the file
+                        fileStream.Position = 0;
+                        headerStream.Position = 0;
+                        headerStream.CopyTo(fileStream);
+                    }
+
+                    // Check if file size exceeds 2GB and display a warning
+                    if (fileStream.Length > int.MaxValue)
+                    {
+                        MessageBox.Show("The HPI file was created, but its size exceeds 2GB (2,147,483,647 bytes). A fatal error may occur when loading the game.",
+                                        "Oversize Warning", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                     }
                 }
-
-                foreach (var duplicate in duplicates)
-                {
-                    entries[duplicate.Key].CompressedDataOffset = entries[duplicate.Value].CompressedDataOffset;
-                }
-
-                string mandatoryEndString = String.Format("Copyright {0} Cavedog Entertainment", DateTime.Now.Year);
-                chunkWriter.Write(System.Text.Encoding.GetEncoding(437).GetBytes(mandatoryEndString));
-
-                BinaryWriter headerWriter = new BinaryWriter(new MemoryStream());
-
-                headerWriter.Write(HpiArchive.HeaderMarker);
-                headerWriter.Write(HpiArchive.DefaultVersion);
-                headerWriter.Write(chunkStartPosition);
-                headerWriter.Write(HpiArchive.NoObfuscationKey);
-                headerWriter.Write(HpiArchive.HeaderSize); //Directory Start
-
-                SortedDictionary<string, FileEntry>.Enumerator sequence = entries.GetEnumerator();
-                directoryTree.WriteTree(headerWriter, sequence);
-
-                fileStream.Position = 0;
-                headerWriter.BaseStream.Position = 0;
-                headerWriter.BaseStream.CopyTo(fileStream);
-
-                if (fileStream.Length > Int32.MaxValue)
-                    MessageBox.Show("The HPI file was created, but its size exceeds 2GB (2 147 483 647 bytes). A fatal error may occur when loading the game.", "Oversize Warning", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
-
+            catch (Exception ex)
+            {
+                MessageBox.Show($"An error occurred while creating or writing to the file '{destinationArchiveFileName}'.\n\nDetails: {ex.Message}",
+                                "File Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                throw;
+            }
         }
+
     }
 }
