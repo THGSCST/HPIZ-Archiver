@@ -163,16 +163,17 @@ namespace HPIZArchiver
                 SetMode(ArchiverMode.File);
             }
         }
-
         private async void directoryToCompressToolStripMenuItem_Click(object sender, EventArgs e)
         {
-            if (dialogOpenFolder.ShowDialog() == DialogResult.OK && !uniqueSources.Contains(dialogOpenFolder.SelectedPath))
+            String selectedDirectory = FolderBrowserDialog.ShowDialog(parentHWnd: IntPtr.Zero, title: "Select folder containing the files to be compressed", null);
+
+            if (selectedDirectory != null && !uniqueSources.Contains(selectedDirectory))
             {
-                uniqueSources.Add(dialogOpenFolder.SelectedPath);
+                uniqueSources.Add(selectedDirectory);
                 SetMode(ArchiverMode.Busy);
                 progressBar.Style = ProgressBarStyle.Marquee;
                 firstStatusLabel.Text = "Loading file list from selected directory...";
-                var dirInfo = await Task.Run(() => GetListViewGroupItens(dialogOpenFolder.SelectedPath));
+                var dirInfo = await Task.Run(() => GetListViewGroupItens(selectedDirectory));
                 AddToListViewFiles(dirInfo);
                 UpdateStatusBarInfo();
                 progressBar.Style = ProgressBarStyle.Continuous;
