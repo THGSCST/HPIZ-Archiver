@@ -93,7 +93,7 @@ namespace HPIZ
                     }
                     catch (Exception ex)
                     {
-                        MessageBox.Show($"An error occurred while reading the file '{fullName}'.\n\nDetails: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                        MessageBox.Show($"An error occurred while reading the file '{fullName}'. The file will be skipped.\n\nDetails: {ex.Message}", "File Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
                     }
                 }
                 else //Is HPI archive
@@ -270,7 +270,7 @@ namespace HPIZ
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"An error occurred while creating or writing to the file '{destinationArchiveFileName}'.\n\nDetails: {ex.Message}",
+                MessageBox.Show($"An error occurred while creating or overwriting to the file '{destinationArchiveFileName}'.\n\nDetails: {ex.Message}",
                                 "File Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 throw;
             }
