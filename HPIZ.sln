@@ -13,14 +13,14 @@ Global
 		HPIZ\HPIZ.projitems*{620d4934-25fc-42b6-906f-b7d34cdb50d5}*SharedItemsImports = 13
 	EndGlobalSection
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
-		Debug|Any CPU = Debug|Any CPU
-		Release|Any CPU = Release|Any CPU
+		Debug|x64 = Debug|x64
+		Release|x64 = Release|x64
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
-		{16E0E47B-1D2F-4AB8-B725-5802D4038608}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{16E0E47B-1D2F-4AB8-B725-5802D4038608}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{16E0E47B-1D2F-4AB8-B725-5802D4038608}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{16E0E47B-1D2F-4AB8-B725-5802D4038608}.Release|Any CPU.Build.0 = Release|Any CPU
+		{16E0E47B-1D2F-4AB8-B725-5802D4038608}.Debug|x64.ActiveCfg = Debug|x64
+		{16E0E47B-1D2F-4AB8-B725-5802D4038608}.Debug|x64.Build.0 = Debug|x64
+		{16E0E47B-1D2F-4AB8-B725-5802D4038608}.Release|x64.ActiveCfg = Release|x64
+		{16E0E47B-1D2F-4AB8-B725-5802D4038608}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
