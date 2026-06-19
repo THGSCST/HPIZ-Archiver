@@ -16,8 +16,10 @@
     <Compile Include="$(MSBuildThisFileDirectory)Compression\LZ77.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)DirectoryNode.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)FileEntry.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)HashUtility.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)HpiArchive.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)HpiFile.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)OperationResults.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Compression\ZopfliDeflater.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)FilePathCollection.cs" />
   </ItemGroup>

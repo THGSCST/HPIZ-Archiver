@@ -5,6 +5,7 @@ using System.Diagnostics;
 using System.Drawing;
 using System.IO;
 using System.Linq;
+using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 
@@ -27,11 +28,83 @@ namespace HPIZArchiver
 
         DuplicateRules dRules = DuplicateRules.KeepFirst;
         enum DuplicateRules { KeepFirst, KeepLast, NoDuplicates }
+        ArchiverMode currentMode = ArchiverMode.Empty;
 
         public MainForm()
         {
             InitializeComponent();
         }
+
+        protected override void OnFormClosed(FormClosedEventArgs e)
+        {
+            DisposeCachedArchives();
+            base.OnFormClosed(e);
+        }
+
+        protected override void OnFormClosing(FormClosingEventArgs e)
+        {
+            if (currentMode == ArchiverMode.Busy)
+            {
+                e.Cancel = true;
+                MessageBox.Show(
+                    this,
+                    "Wait for the current operation to finish before closing the application.",
+                    "Operation in progress",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Information);
+                return;
+            }
+
+            base.OnFormClosing(e);
+        }
+
+        private void DisposeCachedArchives()
+        {
+            foreach (var archive in cachedHPI.Values)
+                archive.Dispose();
+
+            cachedHPI.Clear();
+        }
+
+        private void ShowOperationErrors(string operation, IEnumerable<FileOperationError> errors)
+        {
+            var errorList = errors.ToList();
+            if (errorList.Count == 0)
+                return;
+
+            var message = new StringBuilder();
+            message.AppendLine(operation + " completed with " + errorList.Count + " error(s):");
+            message.AppendLine();
+
+            foreach (var error in errorList.Take(10))
+                message.AppendLine(error.FilePath + ": " + error.Exception.Message);
+
+            if (errorList.Count > 10)
+                message.AppendLine("...and " + (errorList.Count - 10) + " more error(s).");
+
+            MessageBox.Show(this, message.ToString(), operation, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
+
+        private void ShowOperationException(string operation, Exception exception)
+        {
+            MessageBox.Show(this, exception.GetBaseException().Message, operation, MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+
+        private void BeginBusyOperation(string status, ProgressBarStyle progressStyle)
+        {
+            SetMode(ArchiverMode.Busy);
+            progressBar.Style = progressStyle;
+            progressBar.Value = 0;
+            firstStatusLabel.Text = status;
+            secondStatusLabel.Text = string.Empty;
+            secondStatusLabel.IsLink = false;
+            TaskbarProgress.SetState(
+                Handle,
+                progressStyle == ProgressBarStyle.Marquee
+                    ? TaskbarProgress.ProgressState.Indeterminate
+                    : TaskbarProgress.ProgressState.Normal);
+        }
+
         private void MainForm_Load(object sender, EventArgs e)
         {
             flavorLevelComboBox.Items.AddRange(Enum.GetNames(typeof(CompressionMethod)));
@@ -42,6 +115,7 @@ namespace HPIZArchiver
 
         private void SetMode(ArchiverMode mode)
         {
+            currentMode = mode;
             openFilesToolStripMenuItem.Enabled = mode == ArchiverMode.Empty || mode == ArchiverMode.File;
             openDirToolStripMenuItem.Enabled = mode == ArchiverMode.Empty || mode == ArchiverMode.Dir;
             toolStripExtractButton.Enabled = mode == ArchiverMode.File;
@@ -62,7 +136,7 @@ namespace HPIZArchiver
             listViewFiles.Groups.Clear();
             uniqueSources.Clear();
             uniqueNames.Clear();
-            cachedHPI.Clear();
+            DisposeCachedArchives();
             toHashCandidates.Clear();
             sameContent.Clear();
             totalSize = 0;
@@ -80,38 +154,86 @@ namespace HPIZArchiver
         private void AddToListViewFiles(List<ListViewItem> itemList)
         {
             listViewFiles.BeginUpdate();
-            foreach (var item in itemList)
+            try
             {
-                if (!listViewFiles.Groups.Contains(item.Group))
-                    listViewFiles.Groups.Add(item.Group);
-                listViewFiles.Items.Add(item);
-
-                if (uniqueNames.ContainsKey(item.SubItems[1].Text))
+                foreach (var item in itemList)
                 {
-                    uniqueNames[item.SubItems[1].Text].Add(item);
-                    manageDuplicateNamesStripButton.Enabled = true;
-                }
-                else
-                    uniqueNames.Add(item.SubItems[1].Text, new List<ListViewItem>() { item });
-            }
+                    if (!listViewFiles.Groups.Contains(item.Group))
+                        listViewFiles.Groups.Add(item.Group);
+                    listViewFiles.Items.Add(item);
 
-            foreach (ListViewGroup group in listViewFiles.Groups)
-                foreach (var candidate in toHashCandidates.Values)
-                    if (candidate.Count > 1 && candidate[0].Group == group && candidate[0].SubItems[8].Text == string.Empty)
+                    int size = (int)item.SubItems[3].Tag;
+                    totalSize += size;
+                    if (item.SubItems[4].Tag is int)
+                        totalCompressedSize += (int)item.SubItems[4].Tag;
+
+                    string hash = item.SubItems[8].Text;
+                    List<ListViewItem> sizeCandidates;
+                    if (!toHashCandidates.TryGetValue(size, out sizeCandidates))
                     {
-                        if (Directory.Exists(group.Name))
-                            candidate[0].SubItems[8].Text = Utils.CalculateSha256(Path.Combine(group.Name, candidate[0].SubItems[1].Text));
-                        else
-                            candidate[0].SubItems[8].Text = Utils.CalculateSha256(cachedHPI[group.Name].Entries[candidate[0].SubItems[1].Text].Uncompress());
-                        if (sameContent.ContainsKey(candidate[0].SubItems[8].Text))
-                            sameContent[candidate[0].SubItems[8].Text].Add(candidate[0]);
-                        else sameContent.Add(candidate[0].SubItems[8].Text, new List<ListViewItem>() { candidate[0] });
+                        sizeCandidates = new List<ListViewItem>();
+                        toHashCandidates.Add(size, sizeCandidates);
+                    }
+                    sizeCandidates.Add(item);
+
+                    if (!string.IsNullOrEmpty(hash))
+                    {
+                        List<ListViewItem> contentMatches;
+                        if (!sameContent.TryGetValue(hash, out contentMatches))
+                        {
+                            contentMatches = new List<ListViewItem>();
+                            sameContent.Add(hash, contentMatches);
+                        }
+                        contentMatches.Add(item);
                     }
 
-            SetRule(dRules);
-            SetHighliths();
-            showHideColumns();
-            listViewFiles.EndUpdate();
+                    if (uniqueNames.ContainsKey(item.SubItems[1].Text))
+                    {
+                        uniqueNames[item.SubItems[1].Text].Add(item);
+                        manageDuplicateNamesStripButton.Enabled = true;
+                    }
+                    else
+                        uniqueNames.Add(item.SubItems[1].Text, new List<ListViewItem>() { item });
+                }
+
+                foreach (ListViewGroup group in listViewFiles.Groups)
+                    foreach (var candidate in toHashCandidates.Values)
+                        if (candidate.Count > 1 && candidate[0].Group == group && candidate[0].SubItems[8].Text == string.Empty)
+                        {
+                            string hash = CalculateItemHash(candidate[0]);
+                            candidate[0].SubItems[8].Text = hash;
+                            if (!string.IsNullOrEmpty(hash))
+                            {
+                                if (sameContent.ContainsKey(hash))
+                                    sameContent[hash].Add(candidate[0]);
+                                else
+                                    sameContent.Add(hash, new List<ListViewItem>() { candidate[0] });
+                            }
+                        }
+
+                SetRule(dRules);
+                SetHighliths();
+                showHideColumns();
+            }
+            finally
+            {
+                listViewFiles.EndUpdate();
+            }
+        }
+
+        private string CalculateItemHash(ListViewItem item)
+        {
+            try
+            {
+                if (Directory.Exists(item.Group.Name))
+                    return HashUtility.CalculateSha256(Path.Combine(item.Group.Name, item.SubItems[1].Text));
+
+                return HashUtility.CalculateSha256(cachedHPI[item.Group.Name].Entries[item.SubItems[1].Text].Uncompress());
+            }
+            catch
+            {
+                return string.Empty;
+            }
         }
 
         internal void UpdateStatusBarInfo()
@@ -139,9 +261,8 @@ namespace HPIZArchiver
         {
             if (dialogOpenHpi.ShowDialog() == DialogResult.OK)
             {
-                SetMode(ArchiverMode.Busy);
-                progressBar.Style = ProgressBarStyle.Marquee;
-                firstStatusLabel.Text = "Loading file list from selected HPI file(s)...";
+                BeginBusyOperation("Loading file list from selected HPI file(s)...", ProgressBarStyle.Marquee);
+                var errors = new List<FileOperationError>();
 
                 string[] extensionOrder = { ".GP3", ".CCX", ".UFO", ".HPI" }; //File load order
                 var orderedList = dialogOpenHpi.FileNames.OrderBy(x =>
@@ -150,40 +271,96 @@ namespace HPIZArchiver
                     return index < 0 ? int.MaxValue : index;
                 }).ToList();
 
-                foreach (var file in orderedList)
-                    if (!uniqueSources.Contains(file))
-                    {
-                        uniqueSources.Add(file);
-                        cachedHPI.Add(file, HpiFile.Open(file));
-                        var filesInfo = await Task.Run(() => GetListViewGroupItens(file));
-                        AddToListViewFiles(filesInfo);
-                    }
-                UpdateStatusBarInfo();
-                progressBar.Style = ProgressBarStyle.Continuous;
-                SetMode(ArchiverMode.File);
+                try
+                {
+                    bool calculateAllHashes = sha256ToolStripMenuItem.Checked;
+                    foreach (var file in orderedList)
+                        if (!uniqueSources.Contains(file))
+                        {
+                            HpiArchive openedArchive = null;
+                            try
+                            {
+                                openedArchive = HpiFile.Open(file);
+                                cachedHPI.Add(file, openedArchive);
+                                uniqueSources.Add(file);
+
+                                var knownCandidateSizes = new HashSet<int>(toHashCandidates.Keys);
+                                var filesInfo = await Task.Run(
+                                    () => GetListViewGroupItens(file, calculateAllHashes, knownCandidateSizes));
+                                AddToListViewFiles(filesInfo);
+                                openedArchive = null;
+                            }
+                            catch (Exception ex)
+                            {
+                                HpiArchive archive;
+                                if (cachedHPI.TryGetValue(file, out archive))
+                                {
+                                    archive.Dispose();
+                                    cachedHPI.Remove(file);
+                                }
+                                else
+                                {
+                                    openedArchive?.Dispose();
+                                }
+                                uniqueSources.Remove(file);
+                                errors.Add(new FileOperationError(file, ex));
+                            }
+                        }
+
+                    UpdateStatusBarInfo();
+                    ShowOperationErrors("Open archives", errors);
+                }
+                catch (Exception ex)
+                {
+                    ShowOperationException("Open archives", ex);
+                }
+                finally
+                {
+                    progressBar.Style = ProgressBarStyle.Continuous;
+                    TaskbarProgress.SetState(Handle, TaskbarProgress.ProgressState.None);
+                    SetMode(listViewFiles.Groups.Count > 0 ? ArchiverMode.File : ArchiverMode.Empty);
+                }
             }
         }
+
         private async void directoryToCompressToolStripMenuItem_Click(object sender, EventArgs e)
         {
             String selectedDirectory = FolderBrowserDialog.ShowDialog(parentHWnd: IntPtr.Zero, title: "Select folder containing the files to be compressed", null);
 
             if (selectedDirectory != null && !uniqueSources.Contains(selectedDirectory))
             {
-                uniqueSources.Add(selectedDirectory);
-                SetMode(ArchiverMode.Busy);
-                progressBar.Style = ProgressBarStyle.Marquee;
-                firstStatusLabel.Text = "Loading file list from selected directory...";
-                var dirInfo = await Task.Run(() => GetListViewGroupItens(selectedDirectory));
-                AddToListViewFiles(dirInfo);
-                UpdateStatusBarInfo();
-                progressBar.Style = ProgressBarStyle.Continuous;
-                SetMode(ArchiverMode.Dir);
+                BeginBusyOperation("Loading file list from selected directory...", ProgressBarStyle.Marquee);
+                try
+                {
+                    uniqueSources.Add(selectedDirectory);
+                    bool calculateAllHashes = sha256ToolStripMenuItem.Checked;
+                    var knownCandidateSizes = new HashSet<int>(toHashCandidates.Keys);
+                    var dirInfo = await Task.Run(
+                        () => GetListViewGroupItens(selectedDirectory, calculateAllHashes, knownCandidateSizes));
+                    AddToListViewFiles(dirInfo);
+                    UpdateStatusBarInfo();
+                }
+                catch (Exception ex)
+                {
+                    uniqueSources.Remove(selectedDirectory);
+                    ShowOperationException("Open directory", ex);
+                }
+                finally
+                {
+                    progressBar.Style = ProgressBarStyle.Continuous;
+                    TaskbarProgress.SetState(Handle, TaskbarProgress.ProgressState.None);
+                    SetMode(listViewFiles.Groups.Count > 0 ? ArchiverMode.Dir : ArchiverMode.Empty);
+                }
             }
         }
 
-        public List<ListViewItem> GetListViewGroupItens(string fullPath)
+        public List<ListViewItem> GetListViewGroupItens(
+            string fullPath,
+            bool calculateAllHashes,
+            ISet<int> knownCandidateSizes)
         {
             var listColection = new List<ListViewItem>();
+            var currentGroupSizes = new HashSet<int>();
             //Check if path is a directory or file
             if (Directory.Exists(fullPath)) //Directory
             {
@@ -200,8 +377,6 @@ namespace HPIZArchiver
                     {
                         throw new OverflowException(file + " is too large. File maximum size is 2GB (2 147 483 647 bytes).");
                     }
-
-                    totalSize += size;
 
                     ListViewItem lvItem = new ListViewItem(new string[] {
                         String.Empty,
@@ -220,20 +395,12 @@ namespace HPIZArchiver
                     lvItem.Tag = fullPath;
                     listColection.Add(lvItem);
 
-                    if (sha256ToolStripMenuItem.Checked || toHashCandidates.ContainsKey(size))
+                    bool sizeAlreadySeen = knownCandidateSizes.Contains(size) || !currentGroupSizes.Add(size);
+                    if (calculateAllHashes || sizeAlreadySeen)
                     {
-                        var hash = Utils.CalculateSha256(file);
+                        var hash = CalculateHashOrEmpty(file);
                         lvItem.SubItems[8].Text = hash;
-
-                        if (!sha256ToolStripMenuItem.Checked)
-                            toHashCandidates[size].Add(lvItem);
-
-                        if (sameContent.ContainsKey(hash))
-                            sameContent[hash].Add(lvItem);
-                        else sameContent.Add(hash, new List<ListViewItem>() { lvItem });
                     }
-                    else
-                        toHashCandidates.Add(size, new List<ListViewItem>() { lvItem });
                 }
 
             }
@@ -242,9 +409,6 @@ namespace HPIZArchiver
                 var group = new ListViewGroup(fullPath, Path.GetExtension(fullPath).ToUpper() + " File - " + fullPath);
                 foreach (var entry in cachedHPI[fullPath].Entries)
                 {
-                    totalSize += entry.Value.UncompressedSize;
-                    totalCompressedSize += entry.Value.CompressedSizeCount();
-
                     ListViewItem lvItem = new ListViewItem(new string[] {
                         String.Empty,
                         entry.Key,
@@ -267,23 +431,40 @@ namespace HPIZArchiver
 
                     Debug.WriteLine(entry.Key + entry.Value.CompressedDataOffset.ToString());
 
-                    if (sha256ToolStripMenuItem.Checked || toHashCandidates.ContainsKey(entry.Value.UncompressedSize))
+                    bool sizeAlreadySeen = knownCandidateSizes.Contains(entry.Value.UncompressedSize)
+                        || !currentGroupSizes.Add(entry.Value.UncompressedSize);
+                    if (calculateAllHashes || sizeAlreadySeen)
                     {
-                        var hash = Utils.CalculateSha256(entry.Value.Uncompress());
+                        var hash = CalculateHashOrEmpty(entry.Value);
                         lvItem.SubItems[8].Text = hash;
-
-                        if (!sha256ToolStripMenuItem.Checked)
-                            toHashCandidates[entry.Value.UncompressedSize].Add(lvItem);
-
-                        if (sameContent.ContainsKey(hash))
-                            sameContent[hash].Add(lvItem);
-                        else sameContent.Add(hash, new List<ListViewItem>() { lvItem });
                     }
-                    else
-                        toHashCandidates.Add(entry.Value.UncompressedSize, new List<ListViewItem>() { lvItem });
                 }
             }
             return listColection;
+        }
+
+        private static string CalculateHashOrEmpty(string fileName)
+        {
+            try
+            {
+                return HashUtility.CalculateSha256(fileName);
+            }
+            catch
+            {
+                return string.Empty;
+            }
+        }
+
+        private static string CalculateHashOrEmpty(FileEntry entry)
+        {
+            try
+            {
+                return HashUtility.CalculateSha256(entry.Uncompress());
+            }
+            catch
+            {
+                return string.Empty;
+            }
         }
 
         private async void toolStripExtractButton_Click(object sender, EventArgs e)
@@ -293,32 +474,53 @@ namespace HPIZArchiver
 
             else if (dialogExtractToFolder.ShowDialog() == DialogResult.OK)
             {
-                SetMode(ArchiverMode.Busy);
-                firstStatusLabel.Text = "Extracting " + listViewFiles.CheckedItems.Count.ToString() + " files...";
-
+                BeginBusyOperation(
+                    "Extracting " + listViewFiles.CheckedItems.Count.ToString() + " files...",
+                    ProgressBarStyle.Continuous);
                 progressBar.Maximum = listViewFiles.CheckedItems.Count;
 
-                var progress = new Progress<string>(percent =>
+                var progress = new Progress<string>(filePath =>
                 {
-                    progressBar.PerformStep();
+                    if (progressBar.Value < progressBar.Maximum)
+                        progressBar.PerformStep();
+                    secondStatusLabel.Text = filePath;
                     TaskbarProgress.SetValue(this.Handle, progressBar.Value, progressBar.Maximum);
                 });
 
                 var sources = GetCheckedFileNames();
 
                 timer.Restart();
+                try
+                {
+                    ExtractionResult result = await Task.Run(
+                        () => HpiFile.DoExtraction(sources, dialogExtractToFolder.SelectedPath, progress, cachedHPI));
 
-                await Task.Run(() => HpiFile.DoExtraction(sources, dialogExtractToFolder.SelectedPath, progress, cachedHPI));
-
-                timer.Stop();
-
-                firstStatusLabel.Text = String.Format("Done! Elapsed time: {0}m {1}s {2}ms", timer.Elapsed.Minutes,
-                timer.Elapsed.Seconds, timer.Elapsed.Milliseconds);
-                progressBar.Value = progressBar.Maximum;
-                secondStatusLabel.Text = dialogExtractToFolder.SelectedPath;
-                secondStatusLabel.IsLink = true;
-                TaskbarProgress.FlashWindow(this.Handle, true);
-                SetMode(ArchiverMode.Finish);
+                    timer.Stop();
+                    firstStatusLabel.Text = String.Format(
+                        "Done! Extracted {0} file(s). Elapsed time: {1}m {2}s {3}ms",
+                        result.ExtractedFileCount,
+                        timer.Elapsed.Minutes,
+                        timer.Elapsed.Seconds,
+                        timer.Elapsed.Milliseconds);
+                    progressBar.Value = progressBar.Maximum;
+                    secondStatusLabel.Text = dialogExtractToFolder.SelectedPath;
+                    secondStatusLabel.IsLink = true;
+                    TaskbarProgress.FlashWindow(this.Handle, true);
+                    TaskbarProgress.SetState(
+                        Handle,
+                        result.Errors.Count == 0
+                            ? TaskbarProgress.ProgressState.Normal
+                            : TaskbarProgress.ProgressState.Error);
+                    SetMode(ArchiverMode.Finish);
+                    ShowOperationErrors("Extraction", result.Errors);
+                }
+                catch (Exception ex)
+                {
+                    timer.Stop();
+                    TaskbarProgress.SetState(Handle, TaskbarProgress.ProgressState.Error);
+                    SetMode(ArchiverMode.File);
+                    ShowOperationException("Extraction", ex);
+                }
             }
         }
 
@@ -332,38 +534,44 @@ namespace HPIZArchiver
             return fileList;
         }
 
-        public async void compressOrRepackCheckedFiles()
+        public async Task CompressOrRepackCheckedFilesAsync()
         {
-            if (dialogSaveHpi.ShowDialog() == DialogResult.OK)
+            if (dialogSaveHpi.ShowDialog() != DialogResult.OK)
+                return;
+
+            BeginBusyOperation("Compressing... Last processed:", ProgressBarStyle.Continuous);
+            try
             {
-                SetMode(ArchiverMode.Busy);
-
-                firstStatusLabel.Text = "Compressing... Last processed:";
-
-                //Calculate total size and number of chunks to max progressbar
+                long totalChunks = 0;
                 foreach (ListViewItem item in listViewFiles.CheckedItems)
-                    progressBar.Maximum += FileEntry.CalculateChunkQuantity((int)item.SubItems[3].Tag);
+                    totalChunks += FileEntry.CalculateChunkQuantity((int)item.SubItems[3].Tag);
+
+                if (totalChunks > int.MaxValue)
+                    throw new InvalidOperationException("The selected files require more progress steps than the interface supports.");
+
+                progressBar.Maximum = Math.Max(1, (int)totalChunks);
 
                 CompressionMethod flavor;
-                Enum.TryParse(flavorLevelComboBox.Text, out flavor);
+                if (!Enum.TryParse(flavorLevelComboBox.Text, out flavor))
+                    throw new InvalidOperationException("Select a valid compression method.");
 
                 var progress = new Progress<string>(last =>
                 {
                     secondStatusLabel.Text = last;
-                    progressBar.PerformStep();
+                    if (progressBar.Value < progressBar.Maximum)
+                        progressBar.PerformStep();
                     TaskbarProgress.SetValue(this.Handle, progressBar.Value, progressBar.Maximum);
                 });
 
                 var sources = GetCheckedFileNames();
-
                 var duplicateResults = new SortedDictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
                 foreach (var sames in sameContent.Values)
                 {
                     string first = string.Empty;
-                    SortedSet<string> orderedSames = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
+                    var orderedSames = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
                     foreach (var item in sames)
-                        if (item.Checked == true)
+                        if (item.Checked)
                             orderedSames.Add(item.SubItems[1].Text);
 
                     foreach (var item in orderedSames)
@@ -373,37 +581,72 @@ namespace HPIZArchiver
                             duplicateResults.Add(item, first);
                 }
 
-
                 timer.Restart();
-
-                await Task.Run(() => HpiFile.CreateFromManySources(sources, dialogSaveHpi.FileName, flavor, progress, cachedHPI, duplicateResults));
+                ArchiveCreationResult result = await Task.Run(
+                    () => HpiFile.CreateFromManySources(
+                        sources,
+                        dialogSaveHpi.FileName,
+                        flavor,
+                        progress,
+                        cachedHPI,
+                        duplicateResults));
 
                 timer.Stop();
-
-                firstStatusLabel.Text = String.Format("Done! Elapsed time: {0}h {1}m {2}s {3}ms", timer.Elapsed.Hours, timer.Elapsed.Minutes,
-                timer.Elapsed.Seconds, timer.Elapsed.Milliseconds);
+                firstStatusLabel.Text = String.Format(
+                    "Done! Added {0} file(s). Elapsed time: {1}h {2}m {3}s {4}ms",
+                    result.AddedFileCount,
+                    timer.Elapsed.Hours,
+                    timer.Elapsed.Minutes,
+                    timer.Elapsed.Seconds,
+                    timer.Elapsed.Milliseconds);
                 progressBar.Value = progressBar.Maximum;
                 secondStatusLabel.Text = dialogSaveHpi.FileName;
                 secondStatusLabel.IsLink = true;
                 TaskbarProgress.FlashWindow(this.Handle, true);
+                TaskbarProgress.SetState(
+                    Handle,
+                    result.Errors.Count == 0
+                        ? TaskbarProgress.ProgressState.Normal
+                        : TaskbarProgress.ProgressState.Error);
                 SetMode(ArchiverMode.Finish);
+
+                if (result.ExceedsRecommendedSize)
+                {
+                    MessageBox.Show(
+                        this,
+                        "The HPI file was created, but its size exceeds 2GB (2,147,483,647 bytes). A fatal error may occur when loading the game.",
+                        "Oversize Warning",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Warning);
+                }
+
+                ShowOperationErrors("Compression", result.Errors);
+            }
+            catch (Exception ex)
+            {
+                timer.Stop();
+                TaskbarProgress.SetState(Handle, TaskbarProgress.ProgressState.Error);
+                SetMode(listViewFiles.Groups.Count > 0 && Directory.Exists(listViewFiles.Groups[0].Name)
+                    ? ArchiverMode.Dir
+                    : ArchiverMode.File);
+                ShowOperationException("Compression", ex);
             }
         }
 
-        private void compressCheckedFilesToolStripMenuItem_Click(object sender, EventArgs e)
+        private async void compressCheckedFilesToolStripMenuItem_Click(object sender, EventArgs e)
         {
             if (listViewFiles.CheckedItems.Count == 0)
                 MessageBox.Show("Can't Compress: No files have been checked in the list.");
             else
-                compressOrRepackCheckedFiles();
+                await CompressOrRepackCheckedFilesAsync();
         }
 
-        private void mergeRepackCheckedFilesToolStripMenuItem_Click(object sender, EventArgs e)
+        private async void mergeRepackCheckedFilesToolStripMenuItem_Click(object sender, EventArgs e)
         {
             if (listViewFiles.CheckedItems.Count == 0)
                 MessageBox.Show("Can't Merge/Repack: No files have been checked in the list.");
             else
-                compressOrRepackCheckedFiles();
+                await CompressOrRepackCheckedFilesAsync();
         }
 
         private void selectAllToolStripMenuItem_Click(object sender, EventArgs e)
@@ -510,7 +753,7 @@ namespace HPIZArchiver
         private void secondStatusLabel_Click(object sender, EventArgs e)
         {
             if (secondStatusLabel.IsLink)
-                Process.Start("explorer.exe", "/select," + secondStatusLabel.Text);
+                Process.Start("explorer.exe", "/select,\"" + secondStatusLabel.Text + "\"");
         }
 
         private void showHideColumns()
@@ -542,33 +785,29 @@ namespace HPIZArchiver
 
         void SetHighliths()
         {
+            foreach (ListViewItem item in listViewFiles.Items)
+                item.BackColor = default(Color);
+
             foreach (var ocurrence in uniqueNames.Values)
                 if (ocurrence.Count > 1)
                     foreach (var item in ocurrence)
                         if (duplicateNamesinYellowStripMenuItem.Checked)
                             item.BackColor = duplicateNamesinYellowStripMenuItem.BackColor;
-                        else item.BackColor = default(Color);
 
             foreach (var ocurrence in sameContent.Values)
                 if (ocurrence.Count > 1)
                     foreach (var item in ocurrence)
-                        if (duplicateNameContentToolStripMenuItem.Checked)
-                            if (item.BackColor == duplicateNamesinYellowStripMenuItem.BackColor)
-                                item.BackColor = duplicateNameContentToolStripMenuItem.BackColor;
-                            else if (duplicateContentsToolStripMenuItem.Checked)
-                                item.BackColor = duplicateContentsToolStripMenuItem.BackColor;
-                            else if (item.BackColor == duplicateContentsToolStripMenuItem.BackColor)
-                                item.BackColor = default(Color);
-                            else if (item.BackColor == duplicateNameContentToolStripMenuItem.BackColor)
-                                item.BackColor = default(Color);
+                        if (item.BackColor == duplicateNamesinYellowStripMenuItem.BackColor
+                            && duplicateNameContentToolStripMenuItem.Checked)
+                            item.BackColor = duplicateNameContentToolStripMenuItem.BackColor;
+                        else if (duplicateContentsToolStripMenuItem.Checked)
+                            item.BackColor = duplicateContentsToolStripMenuItem.BackColor;
 
 
             foreach (ListViewItem item in listViewFiles.Items)
                 if (!DirectoryExtensionPair.IsDirectoryExtensionKnow(item.SubItems[1].Text))
                     if (unknowFoldersExtensionToolStripMenuItem.Checked)
                         item.BackColor = unknowFoldersExtensionToolStripMenuItem.BackColor;
-                    else if (item.BackColor == unknowFoldersExtensionToolStripMenuItem.BackColor)
-                        item.BackColor = default(Color);
         }
     }
 }

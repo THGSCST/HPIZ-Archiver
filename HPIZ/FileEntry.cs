@@ -32,19 +32,19 @@ namespace HPIZ
                 {
                     CompressedChunkSizes = new int[CalculateChunkQuantity()];
                     ChunkBytes = new MemoryStream[CompressedChunkSizes.Length];
+                    FlagCompression = CompressionMethod.ZLibDeflate;
 
                     // Parallelize chunk compression start
                     Parallel.For(0, CompressedChunkSizes.Length, j =>
                     {
-                        int chunkSize = Chunk.MaxSize;
-                        if (j + 1 == CompressedChunkSizes.Length && uncompressedBytes.Length != Chunk.MaxSize) chunkSize = uncompressedBytes.Length % Chunk.MaxSize; //Last loop
+                        int remainingBytes = uncompressedBytes.Length - (Chunk.MaxSize * j);
+                        int chunkSize = Math.Min(Chunk.MaxSize, remainingBytes);
 
                         var uncompressedChunk = new byte[chunkSize];
                         Buffer.BlockCopy(uncompressedBytes, Chunk.MaxSize * j, uncompressedChunk, 0, chunkSize);
 
                         ChunkBytes[j] = Chunk.Compress(uncompressedChunk, flavor);
 
-                        FlagCompression = CompressionMethod.ZLibDeflate;
                         CompressedChunkSizes[j] = (int)ChunkBytes[j].Length;
 
                         if (progress != null)
@@ -59,6 +59,7 @@ namespace HPIZ
                     if (Strategy.TryCompressKeepIfWorthwhile && ChunkBytes[0].Length + 4 > uncompressedBytes.Length)
                     {
                         FlagCompression = CompressionMethod.StoreUncompressed;
+                        ChunkBytes[0].Dispose();
                         ChunkBytes[0] = new MemoryStream(uncompressedBytes);
                     }
                     else
@@ -102,6 +103,9 @@ namespace HPIZ
             {
                 reader.BaseStream.Position = CompressedDataOffset;
                 var uncompressedOutput = reader.ReadBytes(UncompressedSize);
+                if (uncompressedOutput.Length != UncompressedSize)
+                    throw new EndOfStreamException("The archive entry ended before the expected uncompressed size was reached.");
+
                 if (parent.obfuscationKey != 0)
                     parent.Clarify(uncompressedOutput, (int)CompressedDataOffset);
 
@@ -119,6 +123,8 @@ namespace HPIZ
             long strReadPositions = CompressedDataOffset + (chunkCount * 4);
             reader.BaseStream.Position = strReadPositions;
             var chunkBuffer = reader.ReadBytes(CompressedChunkSizes.Sum());
+            if (chunkBuffer.Length != CompressedChunkSizes.Sum())
+                throw new EndOfStreamException("The archive entry ended before all compressed chunks were read.");
 
             var outBytes = new byte[UncompressedSize];
 
@@ -159,7 +165,10 @@ namespace HPIZ
 
         public static int CalculateChunkQuantity(int size)
         {
-            return (size + Chunk.MaxSize - 1) / Chunk.MaxSize;
+            if (size < 0)
+                throw new ArgumentOutOfRangeException(nameof(size));
+
+            return (int)((size + (long)Chunk.MaxSize - 1) / Chunk.MaxSize);
         }
 
         public int CalculateChunkQuantity()

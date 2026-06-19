@@ -8,15 +8,33 @@ namespace HPIZ
     {
         public static void Decompress(byte[] input, byte[] output)
         {
-            if (input == null || output == null)
-                throw new NullReferenceException("Input or output cannot be null");
+            if (input == null)
+                throw new ArgumentNullException(nameof(input));
+            if (output == null)
+                throw new ArgumentNullException(nameof(output));
 
-            if (input[0] != 0x78 && input[1] != 0x5E && input[1] != 0x9C && input[1] != 0xDA)
+            int header = input.Length >= 2 ? (input[0] << 8) | input[1] : 0;
+            if (input.Length < 2
+                || (input[0] & 0x0F) != 8
+                || (input[0] >> 4) > 7
+                || header % 31 != 0
+                || (input[1] & 0x20) != 0)
                 throw new InvalidDataException("Unexpected ZLib header");
 
             using (var inputStream = new DeflateStream(new MemoryStream(input, 2, input.Length - 2), CompressionMode.Decompress))
             {
-                inputStream.Read(output, 0, output.Length);
+                int totalBytesRead = 0;
+                while (totalBytesRead < output.Length)
+                {
+                    int bytesRead = inputStream.Read(output, totalBytesRead, output.Length - totalBytesRead);
+                    if (bytesRead == 0)
+                        throw new EndOfStreamException("The compressed stream ended before the expected output size was reached.");
+
+                    totalBytesRead += bytesRead;
+                }
+
+                if (inputStream.ReadByte() != -1)
+                    throw new InvalidDataException("The compressed stream expands beyond the expected output size.");
             }
         }
     }
