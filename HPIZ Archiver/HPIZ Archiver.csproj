@@ -92,6 +92,7 @@
     <Compile Include="CollapsibleListView.cs">
       <SubType>Component</SubType>
     </Compile>
+    <Compile Include="CoalescingProgress.cs" />
     <Compile Include="DirectoryExtensionPair.cs" />
     <Compile Include="FolderBrowserDialog.cs" />
     <Compile Include="ListViewItemComparer.cs" />

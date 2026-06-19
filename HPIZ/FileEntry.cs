@@ -8,6 +8,15 @@ namespace HPIZ
 {
     public class FileEntry
     {
+        private const int MinimumChunksForParallelCompression = 4;
+        private const int MinimumChunksForParallelDecompression = 4;
+        // Chunk work is independent, but using every logical processor creates excessive
+        // scheduling and memory pressure on high-core-count and hybrid CPUs.
+        private static readonly ParallelOptions ChunkParallelOptions = new ParallelOptions
+        {
+            MaxDegreeOfParallelism = Math.Max(1, Math.Min(Environment.ProcessorCount, 16))
+        };
+
         private HpiArchive parent;
         public uint CompressedDataOffset;
         public int UncompressedSize;
@@ -41,8 +50,7 @@ namespace HPIZ
                     ChunkBytes = new MemoryStream[CompressedChunkSizes.Length];
                     FlagCompression = CompressionMethod.ZLibDeflate;
 
-                    // Parallelize chunk compression start
-                    Parallel.For(0, CompressedChunkSizes.Length, j =>
+                    Action<int> compressChunk = j =>
                     {
                         int remainingBytes = uncompressedBytes.Length - (Chunk.MaxSize * j);
                         int chunkSize = Math.Min(Chunk.MaxSize, remainingBytes);
@@ -56,7 +64,15 @@ namespace HPIZ
 
                         if (progress != null)
                             progress.Report(reportProgressFileName + ":Chunk#" + j.ToString());
-                    }); // Parallel.For end 
+                    };
+
+                    // Zopfli itself is intentionally sequential within a chunk. Parallelism
+                    // belongs here, between independent chunks, so it is never nested.
+                    if (CompressedChunkSizes.Length >= MinimumChunksForParallelCompression)
+                        Parallel.For(0, CompressedChunkSizes.Length, ChunkParallelOptions, compressChunk);
+                    else
+                        for (int j = 0; j < CompressedChunkSizes.Length; j++)
+                            compressChunk(j);
                 }
                 else //Single chunk
                 {
@@ -135,10 +151,8 @@ namespace HPIZ
 
             var outBytes = new byte[UncompressedSize];
 
-            // Parallelize chunk decompression
-            Parallel.For(0, chunkCount, i =>
+            Action<int> decompressChunk = i =>
             {
-
                 if (parent.obfuscationKey != 0)
                     parent.Clarify(chunkBuffer, (int)(readPositions[i] + strReadPositions), readPositions[i], CompressedChunkSizes[i]);
 
@@ -149,7 +163,13 @@ namespace HPIZ
                 var decompressedChunk = Chunk.Decompress(new MemoryStream(chunkBuffer, readPositions[i], CompressedChunkSizes[i]));
 
                 Buffer.BlockCopy(decompressedChunk, 0, outBytes, i * Chunk.MaxSize, decompressedChunk.Length);
-            }); // Parallel.For
+            };
+
+            if (chunkCount >= MinimumChunksForParallelDecompression)
+                Parallel.For(0, chunkCount, ChunkParallelOptions, decompressChunk);
+            else
+                for (int i = 0; i < chunkCount; i++)
+                    decompressChunk(i);
 
             return outBytes;
         }

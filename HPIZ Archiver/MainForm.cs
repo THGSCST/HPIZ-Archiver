@@ -479,10 +479,11 @@ namespace HPIZArchiver
                     ProgressBarStyle.Continuous);
                 progressBar.Maximum = listViewFiles.CheckedItems.Count;
 
-                var progress = new Progress<string>(filePath =>
+                var progress = new CoalescingProgress<string>((filePath, completedCount) =>
                 {
-                    if (progressBar.Value < progressBar.Maximum)
-                        progressBar.PerformStep();
+                    progressBar.Value = Math.Min(
+                        progressBar.Maximum,
+                        progressBar.Value + completedCount);
                     secondStatusLabel.Text = filePath;
                     TaskbarProgress.SetValue(this.Handle, progressBar.Value, progressBar.Maximum);
                 });
@@ -574,11 +575,12 @@ namespace HPIZArchiver
 
                 progressBar.Maximum = Math.Max(1, (int)totalChunks);
 
-                var progress = new Progress<string>(last =>
+                var progress = new CoalescingProgress<string>((last, completedCount) =>
                 {
                     secondStatusLabel.Text = last;
-                    if (progressBar.Value < progressBar.Maximum)
-                        progressBar.PerformStep();
+                    progressBar.Value = Math.Min(
+                        progressBar.Maximum,
+                        progressBar.Value + completedCount);
                     TaskbarProgress.SetValue(this.Handle, progressBar.Value, progressBar.Maximum);
                 });
 

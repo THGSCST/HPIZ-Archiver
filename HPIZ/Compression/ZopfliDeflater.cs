@@ -18,8 +18,6 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace CompressSharper.Zopfli
 {
@@ -306,13 +304,13 @@ namespace CompressSharper.Zopfli
             var splitpoints = BlockSplit(buffer, bufferStart, bufferEnd);
             var stores = new BlockStore[splitpoints.Count + 1];
 
-            Parallel.For(0, splitpoints.Count + 1, (i) =>
+            for (int i = 0; i < stores.Length; i++)
             {
                 int splitStart = i == 0 ? bufferStart : splitpoints[i - 1];
                 int splitEnd = i == splitpoints.Count ? bufferEnd : splitpoints[i];
 
                 stores[i] = DeflateDynamicBlock(buffer, splitStart, splitEnd, i == splitpoints.Count && finalBlock, true);
-            });
+            }
 
             for (int i = 0; i < stores.Length; i++)
             {
@@ -618,7 +616,7 @@ namespace CompressSharper.Zopfli
 
             private class NodePool
             {
-                static ConcurrentQueue<Node[]> _freePool = new ConcurrentQueue<Node[]>();
+                private static readonly ConcurrentQueue<Node[]> _freePool = new ConcurrentQueue<Node[]>();
                 private int _unusedNode;
                 private Node[] _pool;
 
@@ -1247,100 +1245,95 @@ namespace CompressSharper.Zopfli
             {
                 long blockSymbolSize = ll_lengths[256]; /*blockEnd symbol*/
 
-                Parallel.For(start, end, () => { return 0L; },
-                    (i, loop, blockSymbolSubSize) =>
+                for (int i = start; i < end; i++)
+                {
+                    if (_distances[i] == 0)
                     {
-                        if (_distances[i] == 0)
+                        blockSymbolSize += ll_lengths[_literalLengths[i]];
+                    }
+                    else
+                    {
+                        var dist = _distances[i];
+
+                        int distSymbol;
+                        long distExtraBits;
+
+                        #region find distance symbol
+
+                        if (dist < 193)
                         {
-                            blockSymbolSubSize += ll_lengths[_literalLengths[i]];
+                            if (dist < 13)
+                            {  /* distance 0..13. */
+                                if (dist < 5) distSymbol = dist - 1;
+                                else if (dist < 7) distSymbol = 4;
+                                else if (dist < 9) distSymbol = 5;
+                                else distSymbol = 6;
+                            }
+                            else
+                            {  /* distance 13..193. */
+                                if (dist < 17) distSymbol = 7;
+                                else if (dist < 25) distSymbol = 8;
+                                else if (dist < 33) distSymbol = 9;
+                                else if (dist < 49) distSymbol = 10;
+                                else if (dist < 65) distSymbol = 11;
+                                else if (dist < 97) distSymbol = 12;
+                                else if (dist < 129) distSymbol = 13;
+                                else distSymbol = 14;
+                            }
                         }
                         else
                         {
-                            var dist = _distances[i];
-
-                            int distSymbol;
-                            long distExtraBits;
-
-                            #region find distance symbol
-
-                            if (dist < 193)
+                            if (dist < 2049)
                             {
-                                if (dist < 13)
-                                {  /* distance 0..13. */
-                                    if (dist < 5) distSymbol = dist - 1;
-                                    else if (dist < 7) distSymbol = 4;
-                                    else if (dist < 9) distSymbol = 5;
-                                    else distSymbol = 6;
-                                }
-                                else
-                                {  /* distance 13..193. */
-                                    if (dist < 17) distSymbol = 7;
-                                    else if (dist < 25) distSymbol = 8;
-                                    else if (dist < 33) distSymbol = 9;
-                                    else if (dist < 49) distSymbol = 10;
-                                    else if (dist < 65) distSymbol = 11;
-                                    else if (dist < 97) distSymbol = 12;
-                                    else if (dist < 129) distSymbol = 13;
-                                    else distSymbol = 14;
-                                }
+                                if (dist < 257) distSymbol = 15;
+                                else if (dist < 385) distSymbol = 16;
+                                else if (dist < 513) distSymbol = 17;
+                                else if (dist < 769) distSymbol = 18;
+                                else if (dist < 1025) distSymbol = 19;
+                                else if (dist < 1537) distSymbol = 20;
+                                else distSymbol = 21;
                             }
                             else
                             {
-                                if (dist < 2049)
-                                {  /* distance 193..2049. */
-                                    if (dist < 257) distSymbol = 15;
-                                    else if (dist < 385) distSymbol = 16;
-                                    else if (dist < 513) distSymbol = 17;
-                                    else if (dist < 769) distSymbol = 18;
-                                    else if (dist < 1025) distSymbol = 19;
-                                    else if (dist < 1537) distSymbol = 20;
-                                    else distSymbol = 21;
-                                }
-                                else
-                                {  /* distance 2049..32768. */
-                                    if (dist < 3073) distSymbol = 22;
-                                    else if (dist < 4097) distSymbol = 23;
-                                    else if (dist < 6145) distSymbol = 24;
-                                    else if (dist < 8193) distSymbol = 25;
-                                    else if (dist < 12289) distSymbol = 26;
-                                    else if (dist < 16385) distSymbol = 27;
-                                    else if (dist < 24577) distSymbol = 28;
-                                    else distSymbol = 29;
-                                }
+                                if (dist < 3073) distSymbol = 22;
+                                else if (dist < 4097) distSymbol = 23;
+                                else if (dist < 6145) distSymbol = 24;
+                                else if (dist < 8193) distSymbol = 25;
+                                else if (dist < 12289) distSymbol = 26;
+                                else if (dist < 16385) distSymbol = 27;
+                                else if (dist < 24577) distSymbol = 28;
+                                else distSymbol = 29;
                             }
-
-                            #endregion find distance symbol
-
-                            #region find extra bits
-
-                            if (dist < 5) distExtraBits = 0;
-                            else if (dist < 9) distExtraBits = 1;
-                            else if (dist < 17) distExtraBits = 2;
-                            else if (dist < 33) distExtraBits = 3;
-                            else if (dist < 65) distExtraBits = 4;
-                            else if (dist < 129) distExtraBits = 5;
-                            else if (dist < 257) distExtraBits = 6;
-                            else if (dist < 513) distExtraBits = 7;
-                            else if (dist < 1025) distExtraBits = 8;
-                            else if (dist < 2049) distExtraBits = 9;
-                            else if (dist < 4097) distExtraBits = 10;
-                            else if (dist < 8193) distExtraBits = 11;
-                            else if (dist < 16385) distExtraBits = 12;
-                            else distExtraBits = 13;
-
-                            #endregion find extra bits
-
-                            blockSymbolSubSize +=
-                                ll_lengths[_lengthSymbolTable[_literalLengths[i]]] +
-                                _lengthExtraBitsTable[_literalLengths[i]] +
-                                d_lengths[distSymbol] +
-                                distExtraBits;
                         }
 
-                        return blockSymbolSubSize;
-                    },
-                        (v) => { Interlocked.Add(ref blockSymbolSize, v); }
-                    );
+                        #endregion find distance symbol
+
+                        #region find extra bits
+
+                        if (dist < 5) distExtraBits = 0;
+                        else if (dist < 9) distExtraBits = 1;
+                        else if (dist < 17) distExtraBits = 2;
+                        else if (dist < 33) distExtraBits = 3;
+                        else if (dist < 65) distExtraBits = 4;
+                        else if (dist < 129) distExtraBits = 5;
+                        else if (dist < 257) distExtraBits = 6;
+                        else if (dist < 513) distExtraBits = 7;
+                        else if (dist < 1025) distExtraBits = 8;
+                        else if (dist < 2049) distExtraBits = 9;
+                        else if (dist < 4097) distExtraBits = 10;
+                        else if (dist < 8193) distExtraBits = 11;
+                        else if (dist < 16385) distExtraBits = 12;
+                        else distExtraBits = 13;
+
+                        #endregion find extra bits
+
+                        blockSymbolSize +=
+                            ll_lengths[_lengthSymbolTable[_literalLengths[i]]] +
+                            _lengthExtraBitsTable[_literalLengths[i]] +
+                            d_lengths[distSymbol] +
+                            distExtraBits;
+                    }
+                }
 
                 return blockSymbolSize;
             }
@@ -1519,11 +1512,11 @@ namespace CompressSharper.Zopfli
 
                     var mulFactor = (end - start) / (9 + 1);
 
-                    Parallel.For(0, 9, i =>
+                    for (int i = 0; i < 9; i++)
                     {
                         point[i] = start + (i + 1) * mulFactor;
                         valuePoint[i] = function(point[i]);
-                    }); // Parallel.For
+                    }
                       
                     int bestIndex = 0;
                     double best = valuePoint[0];
@@ -2779,24 +2772,19 @@ namespace CompressSharper.Zopfli
                 double symbolCost = 0;
                 Hash hash = null;
 
-                Parallel.Invoke(
-                    () => { mincost = GetCostModelMinCost(costModel); },
-                    () => { symbolCost = costModel(ZopfliDeflater.MaximumMatch, 1); },
-                    () =>
-                    {
-                        hash = InitializeHash(buffer, bufferStart, bufferEnd);
+                mincost = GetCostModelMinCost(costModel);
+                symbolCost = costModel(ZopfliDeflater.MaximumMatch, 1);
+                hash = InitializeHash(buffer, bufferStart, bufferEnd);
 
-                        sublen = new int[259];
-                        lengthArray = new int[blockSize + 1];
-                        costs = new double[blockSize + 1];
+                sublen = new int[259];
+                lengthArray = new int[blockSize + 1];
+                costs = new double[blockSize + 1];
 
-                        lengthArray[0] = 0;
+                lengthArray[0] = 0;
+                costs[0] = 0d;  /* Because it'blockState the blockStart. */
 
-                        costs[0] = 0d;  /* Because it'blockState the blockStart. */
-
-                        for (int i = 1; i < blockSize + 1; i++)
-                            costs[i] = double.MaxValue;
-                    });
+                for (int i = 1; i < blockSize + 1; i++)
+                    costs[i] = double.MaxValue;
 
                 for (int bufferIndex = bufferStart, lengthArrayIndex = 0; bufferIndex < bufferEnd; bufferIndex++, lengthArrayIndex++)
                 {
