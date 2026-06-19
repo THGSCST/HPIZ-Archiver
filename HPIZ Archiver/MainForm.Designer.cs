@@ -47,10 +47,6 @@
             this.methodToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.offsetToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.sha256ToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
-            this.dialogSaveHpi = new System.Windows.Forms.SaveFileDialog();
-            this.dialogOpenHpi = new System.Windows.Forms.OpenFileDialog();
-            this.dialogExtractToFolder = new System.Windows.Forms.FolderBrowserDialog();
-            this.dialogExtractFile = new System.Windows.Forms.SaveFileDialog();
             this.toolStripOpenButton = new System.Windows.Forms.ToolStripDropDownButton();
             this.openFilesToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.openDirToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
@@ -98,16 +94,16 @@
             this.progressBar,
             this.firstStatusLabel,
             this.secondStatusLabel});
-            this.statusStrip.Location = new System.Drawing.Point(0, 783);
+            this.statusStrip.Location = new System.Drawing.Point(0, 653);
             this.statusStrip.Name = "statusStrip";
-            this.statusStrip.Padding = new System.Windows.Forms.Padding(1, 0, 18, 0);
-            this.statusStrip.Size = new System.Drawing.Size(1295, 39);
+            this.statusStrip.Padding = new System.Windows.Forms.Padding(1, 0, 15, 0);
+            this.statusStrip.Size = new System.Drawing.Size(1060, 32);
             this.statusStrip.TabIndex = 3;
             // 
             // progressBar
             // 
             this.progressBar.Name = "progressBar";
-            this.progressBar.Size = new System.Drawing.Size(165, 29);
+            this.progressBar.Size = new System.Drawing.Size(135, 26);
             this.progressBar.Step = 1;
             this.progressBar.Style = System.Windows.Forms.ProgressBarStyle.Continuous;
             this.progressBar.Visible = false;
@@ -116,7 +112,7 @@
             // 
             this.firstStatusLabel.DisplayStyle = System.Windows.Forms.ToolStripItemDisplayStyle.Text;
             this.firstStatusLabel.Name = "firstStatusLabel";
-            this.firstStatusLabel.Size = new System.Drawing.Size(211, 30);
+            this.firstStatusLabel.Size = new System.Drawing.Size(181, 25);
             this.firstStatusLabel.Text = "No files or directories";
             // 
             // secondStatusLabel
@@ -124,7 +120,7 @@
             this.secondStatusLabel.DisplayStyle = System.Windows.Forms.ToolStripItemDisplayStyle.Text;
             this.secondStatusLabel.Margin = new System.Windows.Forms.Padding(0, 4, 4, 2);
             this.secondStatusLabel.Name = "secondStatusLabel";
-            this.secondStatusLabel.Size = new System.Drawing.Size(1061, 33);
+            this.secondStatusLabel.Size = new System.Drawing.Size(859, 26);
             this.secondStatusLabel.Spring = true;
             this.secondStatusLabel.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
             this.secondStatusLabel.Click += new System.EventHandler(this.secondStatusLabel_Click);
@@ -146,34 +142,34 @@
             this.offsetToolStripMenuItem,
             this.sha256ToolStripMenuItem});
             this.checkListContextMenu.Name = "checkListContextMenu";
-            this.checkListContextMenu.Size = new System.Drawing.Size(246, 406);
+            this.checkListContextMenu.Size = new System.Drawing.Size(220, 362);
             // 
             // selectAllToolStripMenuItem
             // 
             this.selectAllToolStripMenuItem.Name = "selectAllToolStripMenuItem";
             this.selectAllToolStripMenuItem.ShortcutKeys = ((System.Windows.Forms.Keys)((System.Windows.Forms.Keys.Control | System.Windows.Forms.Keys.A)));
-            this.selectAllToolStripMenuItem.Size = new System.Drawing.Size(245, 36);
+            this.selectAllToolStripMenuItem.Size = new System.Drawing.Size(219, 32);
             this.selectAllToolStripMenuItem.Text = "Check All";
             this.selectAllToolStripMenuItem.Click += new System.EventHandler(this.selectAllToolStripMenuItem_Click);
             // 
             // unselectAllToolStripMenuItem
             // 
             this.unselectAllToolStripMenuItem.Name = "unselectAllToolStripMenuItem";
-            this.unselectAllToolStripMenuItem.Size = new System.Drawing.Size(245, 36);
+            this.unselectAllToolStripMenuItem.Size = new System.Drawing.Size(219, 32);
             this.unselectAllToolStripMenuItem.Text = "Uncheck All";
             this.unselectAllToolStripMenuItem.Click += new System.EventHandler(this.unselectAllToolStripMenuItem_Click);
             // 
             // invertSelectedToolStripMenuItem
             // 
             this.invertSelectedToolStripMenuItem.Name = "invertSelectedToolStripMenuItem";
-            this.invertSelectedToolStripMenuItem.Size = new System.Drawing.Size(245, 36);
+            this.invertSelectedToolStripMenuItem.Size = new System.Drawing.Size(219, 32);
             this.invertSelectedToolStripMenuItem.Text = "Invert Checked";
             this.invertSelectedToolStripMenuItem.Click += new System.EventHandler(this.invertSelectedToolStripMenuItem_Click);
             // 
             // toolStripSeparator2
             // 
             this.toolStripSeparator2.Name = "toolStripSeparator2";
-            this.toolStripSeparator2.Size = new System.Drawing.Size(242, 6);
+            this.toolStripSeparator2.Size = new System.Drawing.Size(216, 6);
             // 
             // fullNameToolStripMenuItem
             // 
@@ -182,7 +178,7 @@
             this.fullNameToolStripMenuItem.CheckState = System.Windows.Forms.CheckState.Checked;
             this.fullNameToolStripMenuItem.Enabled = false;
             this.fullNameToolStripMenuItem.Name = "fullNameToolStripMenuItem";
-            this.fullNameToolStripMenuItem.Size = new System.Drawing.Size(245, 36);
+            this.fullNameToolStripMenuItem.Size = new System.Drawing.Size(219, 32);
             this.fullNameToolStripMenuItem.Text = "Full Name";
             this.fullNameToolStripMenuItem.CheckedChanged += new System.EventHandler(this.showHideToolStripMenuItem_CheckedChanged);
             // 
@@ -192,7 +188,7 @@
             this.extensionToolStripMenuItem.CheckOnClick = true;
             this.extensionToolStripMenuItem.CheckState = System.Windows.Forms.CheckState.Checked;
             this.extensionToolStripMenuItem.Name = "extensionToolStripMenuItem";
-            this.extensionToolStripMenuItem.Size = new System.Drawing.Size(245, 36);
+            this.extensionToolStripMenuItem.Size = new System.Drawing.Size(219, 32);
             this.extensionToolStripMenuItem.Text = "Extension";
             this.extensionToolStripMenuItem.CheckedChanged += new System.EventHandler(this.showHideToolStripMenuItem_CheckedChanged);
             // 
@@ -202,7 +198,7 @@
             this.sizeToolStripMenuItem.CheckOnClick = true;
             this.sizeToolStripMenuItem.CheckState = System.Windows.Forms.CheckState.Checked;
             this.sizeToolStripMenuItem.Name = "sizeToolStripMenuItem";
-            this.sizeToolStripMenuItem.Size = new System.Drawing.Size(245, 36);
+            this.sizeToolStripMenuItem.Size = new System.Drawing.Size(219, 32);
             this.sizeToolStripMenuItem.Text = "Size";
             this.sizeToolStripMenuItem.CheckedChanged += new System.EventHandler(this.showHideToolStripMenuItem_CheckedChanged);
             // 
@@ -212,7 +208,7 @@
             this.compressionToolStripMenuItem.CheckOnClick = true;
             this.compressionToolStripMenuItem.CheckState = System.Windows.Forms.CheckState.Checked;
             this.compressionToolStripMenuItem.Name = "compressionToolStripMenuItem";
-            this.compressionToolStripMenuItem.Size = new System.Drawing.Size(245, 36);
+            this.compressionToolStripMenuItem.Size = new System.Drawing.Size(219, 32);
             this.compressionToolStripMenuItem.Text = "Compression";
             this.compressionToolStripMenuItem.CheckedChanged += new System.EventHandler(this.showHideToolStripMenuItem_CheckedChanged);
             // 
@@ -222,7 +218,7 @@
             this.ratioToolStripMenuItem.CheckOnClick = true;
             this.ratioToolStripMenuItem.CheckState = System.Windows.Forms.CheckState.Checked;
             this.ratioToolStripMenuItem.Name = "ratioToolStripMenuItem";
-            this.ratioToolStripMenuItem.Size = new System.Drawing.Size(245, 36);
+            this.ratioToolStripMenuItem.Size = new System.Drawing.Size(219, 32);
             this.ratioToolStripMenuItem.Text = "Ratio";
             this.ratioToolStripMenuItem.CheckedChanged += new System.EventHandler(this.showHideToolStripMenuItem_CheckedChanged);
             // 
@@ -230,7 +226,7 @@
             // 
             this.methodToolStripMenuItem.CheckOnClick = true;
             this.methodToolStripMenuItem.Name = "methodToolStripMenuItem";
-            this.methodToolStripMenuItem.Size = new System.Drawing.Size(245, 36);
+            this.methodToolStripMenuItem.Size = new System.Drawing.Size(219, 32);
             this.methodToolStripMenuItem.Text = "Method";
             this.methodToolStripMenuItem.CheckedChanged += new System.EventHandler(this.showHideToolStripMenuItem_CheckedChanged);
             // 
@@ -238,7 +234,7 @@
             // 
             this.offsetToolStripMenuItem.CheckOnClick = true;
             this.offsetToolStripMenuItem.Name = "offsetToolStripMenuItem";
-            this.offsetToolStripMenuItem.Size = new System.Drawing.Size(245, 36);
+            this.offsetToolStripMenuItem.Size = new System.Drawing.Size(219, 32);
             this.offsetToolStripMenuItem.Text = "Offset";
             this.offsetToolStripMenuItem.CheckedChanged += new System.EventHandler(this.showHideToolStripMenuItem_CheckedChanged);
             // 
@@ -246,26 +242,9 @@
             // 
             this.sha256ToolStripMenuItem.CheckOnClick = true;
             this.sha256ToolStripMenuItem.Name = "sha256ToolStripMenuItem";
-            this.sha256ToolStripMenuItem.Size = new System.Drawing.Size(245, 36);
+            this.sha256ToolStripMenuItem.Size = new System.Drawing.Size(219, 32);
             this.sha256ToolStripMenuItem.Text = "SHA-256";
             this.sha256ToolStripMenuItem.CheckedChanged += new System.EventHandler(this.showHideToolStripMenuItem_CheckedChanged);
-            // 
-            // dialogSaveHpi
-            // 
-            this.dialogSaveHpi.Filter = "HPI Files|*.hpi|CCX Files|*.ccx|UFO Files|*.ufo|GP3 Files|*.gp3";
-            this.dialogSaveHpi.SupportMultiDottedExtensions = true;
-            // 
-            // dialogOpenHpi
-            // 
-            this.dialogOpenHpi.Filter = "All TA Files|*.hpi;*.ccx;*.ufo;*.gp?|HPI Files|*.hpi|CCX Files|*.ccx|UFO Files|*." +
-    "ufo|GP Files|*.gp?|All Files|*.*";
-            this.dialogOpenHpi.Multiselect = true;
-            this.dialogOpenHpi.Title = "Select one or many HPI files to open";
-            // 
-            // dialogExtractToFolder
-            // 
-            this.dialogExtractToFolder.Description = "Folder to extract all checked files";
-            this.dialogExtractToFolder.RootFolder = System.Environment.SpecialFolder.MyComputer;
             // 
             // toolStripOpenButton
             // 
@@ -280,7 +259,7 @@
             this.toolStripOpenButton.ImageTransparentColor = System.Drawing.Color.Magenta;
             this.toolStripOpenButton.Name = "toolStripOpenButton";
             this.toolStripOpenButton.Overflow = System.Windows.Forms.ToolStripItemOverflow.Never;
-            this.toolStripOpenButton.Size = new System.Drawing.Size(85, 66);
+            this.toolStripOpenButton.Size = new System.Drawing.Size(74, 61);
             this.toolStripOpenButton.Text = "Open";
             this.toolStripOpenButton.TextImageRelation = System.Windows.Forms.TextImageRelation.ImageAboveText;
             this.toolStripOpenButton.ToolTipText = "Open a file archive or a directory";
@@ -288,27 +267,27 @@
             // openFilesToolStripMenuItem
             // 
             this.openFilesToolStripMenuItem.Name = "openFilesToolStripMenuItem";
-            this.openFilesToolStripMenuItem.Size = new System.Drawing.Size(352, 40);
+            this.openFilesToolStripMenuItem.Size = new System.Drawing.Size(305, 34);
             this.openFilesToolStripMenuItem.Text = "HPI File or Files...";
             this.openFilesToolStripMenuItem.Click += new System.EventHandler(this.openFilesStripMenuItem_Click);
             // 
             // openDirToolStripMenuItem
             // 
             this.openDirToolStripMenuItem.Name = "openDirToolStripMenuItem";
-            this.openDirToolStripMenuItem.Size = new System.Drawing.Size(352, 40);
+            this.openDirToolStripMenuItem.Size = new System.Drawing.Size(305, 34);
             this.openDirToolStripMenuItem.Text = "Directory to Compress...";
             this.openDirToolStripMenuItem.Click += new System.EventHandler(this.directoryToCompressToolStripMenuItem_Click);
             // 
             // toolStripSeparator4
             // 
             this.toolStripSeparator4.Name = "toolStripSeparator4";
-            this.toolStripSeparator4.Size = new System.Drawing.Size(349, 6);
+            this.toolStripSeparator4.Size = new System.Drawing.Size(302, 6);
             // 
             // closeAllToolStripMenuItem
             // 
             this.closeAllToolStripMenuItem.Enabled = false;
             this.closeAllToolStripMenuItem.Name = "closeAllToolStripMenuItem";
-            this.closeAllToolStripMenuItem.Size = new System.Drawing.Size(352, 40);
+            this.closeAllToolStripMenuItem.Size = new System.Drawing.Size(305, 34);
             this.closeAllToolStripMenuItem.Text = "Close All";
             this.closeAllToolStripMenuItem.Click += new System.EventHandler(this.closeAllToolStripMenuItem_Click);
             // 
@@ -320,7 +299,7 @@
             this.toolStripExtractButton.ImageScaling = System.Windows.Forms.ToolStripItemImageScaling.None;
             this.toolStripExtractButton.ImageTransparentColor = System.Drawing.Color.Magenta;
             this.toolStripExtractButton.Name = "toolStripExtractButton";
-            this.toolStripExtractButton.Size = new System.Drawing.Size(80, 66);
+            this.toolStripExtractButton.Size = new System.Drawing.Size(68, 61);
             this.toolStripExtractButton.Text = "Extract";
             this.toolStripExtractButton.TextImageRelation = System.Windows.Forms.TextImageRelation.ImageAboveText;
             this.toolStripExtractButton.ToolTipText = "Extract checked files";
@@ -330,7 +309,7 @@
             // 
             this.toolStripSeparator1.Alignment = System.Windows.Forms.ToolStripItemAlignment.Right;
             this.toolStripSeparator1.Name = "toolStripSeparator1";
-            this.toolStripSeparator1.Size = new System.Drawing.Size(6, 72);
+            this.toolStripSeparator1.Size = new System.Drawing.Size(6, 66);
             // 
             // toolStripCompressButton
             // 
@@ -343,7 +322,7 @@
             this.toolStripCompressButton.ImageScaling = System.Windows.Forms.ToolStripItemImageScaling.None;
             this.toolStripCompressButton.ImageTransparentColor = System.Drawing.Color.Magenta;
             this.toolStripCompressButton.Name = "toolStripCompressButton";
-            this.toolStripCompressButton.Size = new System.Drawing.Size(125, 66);
+            this.toolStripCompressButton.Size = new System.Drawing.Size(110, 61);
             this.toolStripCompressButton.Text = "Compress";
             this.toolStripCompressButton.TextImageRelation = System.Windows.Forms.TextImageRelation.ImageAboveText;
             this.toolStripCompressButton.ToolTipText = "Compress or Merge";
@@ -351,14 +330,14 @@
             // compressCheckedFilesToolStripMenuItem
             // 
             this.compressCheckedFilesToolStripMenuItem.Name = "compressCheckedFilesToolStripMenuItem";
-            this.compressCheckedFilesToolStripMenuItem.Size = new System.Drawing.Size(434, 40);
+            this.compressCheckedFilesToolStripMenuItem.Size = new System.Drawing.Size(371, 34);
             this.compressCheckedFilesToolStripMenuItem.Text = "Compress Checked Files...";
             this.compressCheckedFilesToolStripMenuItem.Click += new System.EventHandler(this.compressCheckedFilesToolStripMenuItem_Click);
             // 
             // mergeRepackCheckedFilesToolStripMenuItem
             // 
             this.mergeRepackCheckedFilesToolStripMenuItem.Name = "mergeRepackCheckedFilesToolStripMenuItem";
-            this.mergeRepackCheckedFilesToolStripMenuItem.Size = new System.Drawing.Size(434, 40);
+            this.mergeRepackCheckedFilesToolStripMenuItem.Size = new System.Drawing.Size(371, 34);
             this.mergeRepackCheckedFilesToolStripMenuItem.Text = "Merge or Repack Checked Files...";
             this.mergeRepackCheckedFilesToolStripMenuItem.Click += new System.EventHandler(this.mergeRepackCheckedFilesToolStripMenuItem_Click);
             // 
@@ -370,7 +349,7 @@
             this.flavorLevelComboBox.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
             this.flavorLevelComboBox.Enabled = false;
             this.flavorLevelComboBox.Name = "flavorLevelComboBox";
-            this.flavorLevelComboBox.Size = new System.Drawing.Size(221, 72);
+            this.flavorLevelComboBox.Size = new System.Drawing.Size(182, 66);
             this.flavorLevelComboBox.ToolTipText = "Select compression level or flavor (defaul is i15 Zopfli Deflate)";
             // 
             // flavorStripLabel
@@ -378,13 +357,13 @@
             this.flavorStripLabel.Alignment = System.Windows.Forms.ToolStripItemAlignment.Right;
             this.flavorStripLabel.Enabled = false;
             this.flavorStripLabel.Name = "flavorStripLabel";
-            this.flavorStripLabel.Size = new System.Drawing.Size(73, 66);
+            this.flavorStripLabel.Size = new System.Drawing.Size(64, 61);
             this.flavorStripLabel.Text = "Flavor:";
             // 
             // toolStripSeparator3
             // 
             this.toolStripSeparator3.Name = "toolStripSeparator3";
-            this.toolStripSeparator3.Size = new System.Drawing.Size(6, 72);
+            this.toolStripSeparator3.Size = new System.Drawing.Size(6, 66);
             // 
             // manageDuplicateNamesStripButton
             // 
@@ -397,7 +376,7 @@
             this.manageDuplicateNamesStripButton.ImageScaling = System.Windows.Forms.ToolStripItemImageScaling.None;
             this.manageDuplicateNamesStripButton.ImageTransparentColor = System.Drawing.Color.Magenta;
             this.manageDuplicateNamesStripButton.Name = "manageDuplicateNamesStripButton";
-            this.manageDuplicateNamesStripButton.Size = new System.Drawing.Size(213, 66);
+            this.manageDuplicateNamesStripButton.Size = new System.Drawing.Size(181, 61);
             this.manageDuplicateNamesStripButton.Text = "Manage Duplicates";
             this.manageDuplicateNamesStripButton.TextImageRelation = System.Windows.Forms.TextImageRelation.ImageAboveText;
             this.manageDuplicateNamesStripButton.ToolTipText = "This menu is enabled if there are two or more files with the same name.";
@@ -408,7 +387,7 @@
             this.keepFirstNameToolStripMenuItem.CheckState = System.Windows.Forms.CheckState.Checked;
             this.keepFirstNameToolStripMenuItem.Name = "keepFirstNameToolStripMenuItem";
             this.keepFirstNameToolStripMenuItem.ShowShortcutKeys = false;
-            this.keepFirstNameToolStripMenuItem.Size = new System.Drawing.Size(392, 40);
+            this.keepFirstNameToolStripMenuItem.Size = new System.Drawing.Size(332, 34);
             this.keepFirstNameToolStripMenuItem.Text = "Keep First Name";
             this.keepFirstNameToolStripMenuItem.ToolTipText = "Uncheck all duplicates except the first one";
             this.keepFirstNameToolStripMenuItem.Click += new System.EventHandler(this.keepFirstToolStripMenuItem_Click);
@@ -417,7 +396,7 @@
             // 
             this.keepLastNameToolStripMenuItem.Name = "keepLastNameToolStripMenuItem";
             this.keepLastNameToolStripMenuItem.ShowShortcutKeys = false;
-            this.keepLastNameToolStripMenuItem.Size = new System.Drawing.Size(392, 40);
+            this.keepLastNameToolStripMenuItem.Size = new System.Drawing.Size(332, 34);
             this.keepLastNameToolStripMenuItem.Text = "Keep Last Name";
             this.keepLastNameToolStripMenuItem.Click += new System.EventHandler(this.keepLastToolStripMenuItem_Click);
             // 
@@ -425,7 +404,7 @@
             // 
             this.uncheckAllDuplicateNamesToolStripMenuItem.Name = "uncheckAllDuplicateNamesToolStripMenuItem";
             this.uncheckAllDuplicateNamesToolStripMenuItem.ShowShortcutKeys = false;
-            this.uncheckAllDuplicateNamesToolStripMenuItem.Size = new System.Drawing.Size(392, 40);
+            this.uncheckAllDuplicateNamesToolStripMenuItem.Size = new System.Drawing.Size(332, 34);
             this.uncheckAllDuplicateNamesToolStripMenuItem.Text = "Uncheck All Duplicate Names";
             this.uncheckAllDuplicateNamesToolStripMenuItem.Click += new System.EventHandler(this.uncheckAllDuplicatesToolStripMenuItem_Click);
             // 
@@ -445,8 +424,7 @@
             this.manageDuplicateNamesStripButton});
             this.toolStrip.Location = new System.Drawing.Point(0, 0);
             this.toolStrip.Name = "toolStrip";
-            this.toolStrip.Padding = new System.Windows.Forms.Padding(0, 0, 3, 0);
-            this.toolStrip.Size = new System.Drawing.Size(1295, 72);
+            this.toolStrip.Size = new System.Drawing.Size(1060, 66);
             this.toolStrip.TabIndex = 2;
             // 
             // HighlightsToolStripDropDownButton
@@ -461,7 +439,7 @@
             this.HighlightsToolStripDropDownButton.ImageScaling = System.Windows.Forms.ToolStripItemImageScaling.None;
             this.HighlightsToolStripDropDownButton.ImageTransparentColor = System.Drawing.Color.Magenta;
             this.HighlightsToolStripDropDownButton.Name = "HighlightsToolStripDropDownButton";
-            this.HighlightsToolStripDropDownButton.Size = new System.Drawing.Size(128, 66);
+            this.HighlightsToolStripDropDownButton.Size = new System.Drawing.Size(111, 61);
             this.HighlightsToolStripDropDownButton.Text = "Highlights";
             this.HighlightsToolStripDropDownButton.TextImageRelation = System.Windows.Forms.TextImageRelation.ImageAboveText;
             this.HighlightsToolStripDropDownButton.ToolTipText = "Highlights to visually indicates different types of file statuses";
@@ -474,7 +452,7 @@
             this.unknowFoldersExtensionToolStripMenuItem.CheckState = System.Windows.Forms.CheckState.Checked;
             this.unknowFoldersExtensionToolStripMenuItem.Name = "unknowFoldersExtensionToolStripMenuItem";
             this.unknowFoldersExtensionToolStripMenuItem.ShowShortcutKeys = false;
-            this.unknowFoldersExtensionToolStripMenuItem.Size = new System.Drawing.Size(458, 40);
+            this.unknowFoldersExtensionToolStripMenuItem.Size = new System.Drawing.Size(394, 34);
             this.unknowFoldersExtensionToolStripMenuItem.Text = "Unknow Folders or Extensions in Red";
             this.unknowFoldersExtensionToolStripMenuItem.ToolTipText = "Highlight folders or file extensions not typically used by the game";
             this.unknowFoldersExtensionToolStripMenuItem.CheckedChanged += new System.EventHandler(this.changeHighLightsToolStripMenuItem_Click);
@@ -487,7 +465,7 @@
             this.duplicateContentsToolStripMenuItem.CheckState = System.Windows.Forms.CheckState.Checked;
             this.duplicateContentsToolStripMenuItem.Name = "duplicateContentsToolStripMenuItem";
             this.duplicateContentsToolStripMenuItem.ShowShortcutKeys = false;
-            this.duplicateContentsToolStripMenuItem.Size = new System.Drawing.Size(458, 40);
+            this.duplicateContentsToolStripMenuItem.Size = new System.Drawing.Size(394, 34);
             this.duplicateContentsToolStripMenuItem.Text = "Duplicate Contents in Blue";
             this.duplicateContentsToolStripMenuItem.ToolTipText = "Highlight duplicate content files with different names using binary comparison\r\n";
             this.duplicateContentsToolStripMenuItem.CheckedChanged += new System.EventHandler(this.changeHighLightsToolStripMenuItem_Click);
@@ -495,7 +473,7 @@
             // toolStripSeparator7
             // 
             this.toolStripSeparator7.Name = "toolStripSeparator7";
-            this.toolStripSeparator7.Size = new System.Drawing.Size(455, 6);
+            this.toolStripSeparator7.Size = new System.Drawing.Size(391, 6);
             // 
             // duplicateNamesinYellowStripMenuItem
             // 
@@ -505,7 +483,7 @@
             this.duplicateNamesinYellowStripMenuItem.CheckState = System.Windows.Forms.CheckState.Checked;
             this.duplicateNamesinYellowStripMenuItem.Name = "duplicateNamesinYellowStripMenuItem";
             this.duplicateNamesinYellowStripMenuItem.ShowShortcutKeys = false;
-            this.duplicateNamesinYellowStripMenuItem.Size = new System.Drawing.Size(458, 40);
+            this.duplicateNamesinYellowStripMenuItem.Size = new System.Drawing.Size(394, 34);
             this.duplicateNamesinYellowStripMenuItem.Text = "Duplicate Names in Yellow";
             this.duplicateNamesinYellowStripMenuItem.ToolTipText = "Highlight files with identical names but different contents when opening multiple" +
     " folders or archives\r\n";
@@ -519,7 +497,7 @@
             this.duplicateNameContentToolStripMenuItem.CheckState = System.Windows.Forms.CheckState.Checked;
             this.duplicateNameContentToolStripMenuItem.Name = "duplicateNameContentToolStripMenuItem";
             this.duplicateNameContentToolStripMenuItem.ShowShortcutKeys = false;
-            this.duplicateNameContentToolStripMenuItem.Size = new System.Drawing.Size(458, 40);
+            this.duplicateNameContentToolStripMenuItem.Size = new System.Drawing.Size(394, 34);
             this.duplicateNameContentToolStripMenuItem.Text = "Duplicate Name+Content in Green";
             this.duplicateNameContentToolStripMenuItem.ToolTipText = "Highlight files with identical names and identical contents when opening multiple" +
     " folders or archives.";
@@ -528,7 +506,7 @@
             // toolStripSeparator5
             // 
             this.toolStripSeparator5.Name = "toolStripSeparator5";
-            this.toolStripSeparator5.Size = new System.Drawing.Size(6, 72);
+            this.toolStripSeparator5.Size = new System.Drawing.Size(6, 66);
             // 
             // listViewFiles
             // 
@@ -551,11 +529,11 @@
             this.listViewFiles.HideSelection = false;
             this.listViewFiles.HotTracking = true;
             this.listViewFiles.HoverSelection = true;
-            this.listViewFiles.Location = new System.Drawing.Point(0, 72);
-            this.listViewFiles.Margin = new System.Windows.Forms.Padding(4, 3, 4, 3);
+            this.listViewFiles.Location = new System.Drawing.Point(0, 66);
+            this.listViewFiles.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
             this.listViewFiles.MultiSelect = false;
             this.listViewFiles.Name = "listViewFiles";
-            this.listViewFiles.Size = new System.Drawing.Size(1295, 711);
+            this.listViewFiles.Size = new System.Drawing.Size(1060, 587);
             this.listViewFiles.TabIndex = 4;
             this.listViewFiles.Tag = "A";
             this.listViewFiles.UseCompatibleStateImageBehavior = false;
@@ -612,14 +590,14 @@
             // 
             // MainForm
             // 
-            this.AutoScaleDimensions = new System.Drawing.SizeF(11F, 24F);
+            this.AutoScaleDimensions = new System.Drawing.SizeF(9F, 20F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(1295, 822);
+            this.ClientSize = new System.Drawing.Size(1060, 685);
             this.Controls.Add(this.listViewFiles);
             this.Controls.Add(this.statusStrip);
             this.Controls.Add(this.toolStrip);
             this.Icon = ((System.Drawing.Icon)(resources.GetObject("$this.Icon")));
-            this.Margin = new System.Windows.Forms.Padding(4, 3, 4, 3);
+            this.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
             this.Name = "MainForm";
             this.Text = "HPIZ Archiver v1.3.1";
             this.Load += new System.EventHandler(this.MainForm_Load);
@@ -638,10 +616,6 @@
         private System.Windows.Forms.ToolStripStatusLabel firstStatusLabel;
         private System.Windows.Forms.ColumnHeader columnFullName;
         private System.Windows.Forms.ColumnHeader columnSize;
-        private System.Windows.Forms.SaveFileDialog dialogSaveHpi;
-        private System.Windows.Forms.OpenFileDialog dialogOpenHpi;
-        private System.Windows.Forms.FolderBrowserDialog dialogExtractToFolder;
-        private System.Windows.Forms.SaveFileDialog dialogExtractFile;
         private System.Windows.Forms.ToolStripProgressBar progressBar;
         private System.Windows.Forms.ColumnHeader columnCompressed;
         private System.Windows.Forms.ColumnHeader columnRatio;

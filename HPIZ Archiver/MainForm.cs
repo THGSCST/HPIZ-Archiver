@@ -13,6 +13,12 @@ namespace HPIZArchiver
 {
     public partial class MainForm : Form
     {
+        private const string ArchiveOpenFilter =
+            "All TA Files|*.hpi;*.ccx;*.ufo;*.gp?|HPI Files|*.hpi|CCX Files|*.ccx|" +
+            "UFO Files|*.ufo|GP Files|*.gp?|All Files|*.*";
+        private const string ArchiveSaveFilter =
+            "HPI Files|*.hpi|CCX Files|*.ccx|UFO Files|*.ufo|GP3 Files|*.gp3";
+
         SortedSet<string> uniqueSources = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
         Dictionary<string, List<ListViewItem>> uniqueNames = new Dictionary<string, List<ListViewItem>>(StringComparer.OrdinalIgnoreCase);
 
@@ -259,13 +265,18 @@ namespace HPIZArchiver
 
         internal async void openFilesStripMenuItem_Click(object sender, EventArgs e)
         {
-            if (dialogOpenHpi.ShowDialog() == DialogResult.OK)
+            string[] selectedFiles = ModernDialogs.OpenFiles(
+                this,
+                "Select one or many HPI files to open",
+                ArchiveOpenFilter);
+
+            if (selectedFiles.Length > 0)
             {
                 BeginBusyOperation("Loading file list from selected HPI file(s)...", ProgressBarStyle.Marquee);
                 var errors = new List<FileOperationError>();
 
                 string[] extensionOrder = { ".GP3", ".CCX", ".UFO", ".HPI" }; //File load order
-                var orderedList = dialogOpenHpi.FileNames.OrderBy(x =>
+                var orderedList = selectedFiles.OrderBy(x =>
                 {
                     var index = Array.IndexOf(extensionOrder, Path.GetExtension(x).ToUpper());
                     return index < 0 ? int.MaxValue : index;
@@ -325,7 +336,9 @@ namespace HPIZArchiver
 
         private async void directoryToCompressToolStripMenuItem_Click(object sender, EventArgs e)
         {
-            String selectedDirectory = FolderBrowserDialog.ShowDialog(parentHWnd: IntPtr.Zero, title: "Select folder containing the files to be compressed", null);
+            string selectedDirectory = ModernDialogs.SelectFolder(
+                this,
+                "Select folder containing the files to be compressed");
 
             if (selectedDirectory != null && !uniqueSources.Contains(selectedDirectory))
             {
@@ -472,8 +485,14 @@ namespace HPIZArchiver
             if (listViewFiles.CheckedItems.Count == 0)
                 MessageBox.Show("Can't Extract: No files have been checked in the list.");
 
-            else if (dialogExtractToFolder.ShowDialog() == DialogResult.OK)
+            else
             {
+                string selectedDirectory = ModernDialogs.SelectFolder(
+                    this,
+                    "Select folder for the extracted files");
+                if (selectedDirectory == null)
+                    return;
+
                 BeginBusyOperation(
                     "Extracting " + listViewFiles.CheckedItems.Count.ToString() + " files...",
                     ProgressBarStyle.Continuous);
@@ -494,7 +513,7 @@ namespace HPIZArchiver
                 try
                 {
                     ExtractionResult result = await Task.Run(
-                        () => HpiFile.DoExtraction(sources, dialogExtractToFolder.SelectedPath, progress, cachedHPI));
+                        () => HpiFile.DoExtraction(sources, selectedDirectory, progress, cachedHPI));
 
                     timer.Stop();
                     firstStatusLabel.Text = String.Format(
@@ -504,7 +523,7 @@ namespace HPIZArchiver
                         timer.Elapsed.Seconds,
                         timer.Elapsed.Milliseconds);
                     progressBar.Value = progressBar.Maximum;
-                    secondStatusLabel.Text = dialogExtractToFolder.SelectedPath;
+                    secondStatusLabel.Text = selectedDirectory;
                     secondStatusLabel.IsLink = true;
                     TaskbarProgress.FlashWindow(this.Handle, true);
                     TaskbarProgress.SetState(
@@ -537,7 +556,12 @@ namespace HPIZArchiver
 
         public async Task CompressOrRepackCheckedFilesAsync()
         {
-            if (dialogSaveHpi.ShowDialog() != DialogResult.OK)
+            string destinationFile = ModernDialogs.SaveFile(
+                this,
+                "Create HPI archive",
+                ArchiveSaveFilter,
+                "hpi");
+            if (destinationFile == null)
                 return;
 
             BeginBusyOperation("Compressing... Last processed:", ProgressBarStyle.Continuous);
@@ -588,7 +612,7 @@ namespace HPIZArchiver
                 ArchiveCreationResult result = await Task.Run(
                     () => HpiFile.CreateFromManySources(
                         sources,
-                        dialogSaveHpi.FileName,
+                        destinationFile,
                         flavor,
                         progress,
                         cachedHPI,
@@ -603,7 +627,7 @@ namespace HPIZArchiver
                     timer.Elapsed.Seconds,
                     timer.Elapsed.Milliseconds);
                 progressBar.Value = progressBar.Maximum;
-                secondStatusLabel.Text = dialogSaveHpi.FileName;
+                secondStatusLabel.Text = destinationFile;
                 secondStatusLabel.IsLink = true;
                 TaskbarProgress.FlashWindow(this.Handle, true);
                 TaskbarProgress.SetState(
