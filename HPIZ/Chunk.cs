@@ -13,39 +13,52 @@ namespace HPIZ
         public const int MaxSize = 65536; //Maximum chunk size in bytes
         private const byte NoObfuscation = 0;
 
-        internal static MemoryStream Compress(byte[] bytesToCompress, CompressionMethod flavor)
+        internal static BinaryBuffer Compress(byte[] input, int inputOffset, int inputCount, CompressionMethod flavor)
         {
-            if (bytesToCompress == null)
-                throw new InvalidDataException("Cannot compress null array");
+            if (input == null)
+                throw new ArgumentNullException(nameof(input));
+            if (inputOffset < 0 || inputCount < 0 || inputOffset > input.Length - inputCount)
+                throw new ArgumentOutOfRangeException();
 
             if (flavor == CompressionMethod.StoreUncompressed)
                 throw new InvalidOperationException("Chunk format cannot be used for uncompressed data");
 
-            MemoryStream output = new MemoryStream(bytesToCompress.Length);
-            BinaryWriter writer = new BinaryWriter(output);
-
-            writer.BaseStream.Position = OverheadSize;
-            writer.Write((byte)0x78); //ZLib header first byte
-            writer.Write((byte)0xDA); //ZLib header second byte
+            // DEFLATE can be slightly larger than incompressible input. Reserve enough
+            // headroom to avoid MemoryStream doubling its backing array.
+            var output = new MemoryStream(checked(inputCount + OverheadSize + 128));
+            output.Position = OverheadSize;
+            output.WriteByte(0x78);
+            output.WriteByte(0xDA);
 
             switch (flavor)
             {
                 case CompressionMethod.ZLibDeflate:
                     using (DeflateStream deflateStream = new DeflateStream(output, CompressionLevel.Optimal, true))
-                        deflateStream.Write(bytesToCompress, 0, bytesToCompress.Length);
+                        deflateStream.Write(input, inputOffset, inputCount);
                     break;
 
                 case CompressionMethod.i5ZopfliDeflate:
                 case CompressionMethod.i10ZopfliDeflate:
                 case CompressionMethod.i15ZopfliDeflate:
 
-                    if (bytesToCompress.Length < Strategy.ZopfliBreakEven) //Skip Zopfli if chunk is small
+                    if (inputCount < Strategy.ZopfliBreakEven) //Skip Zopfli if chunk is small
                         goto case CompressionMethod.ZLibDeflate;
+
+                    byte[] zopfliInput;
+                    if (inputOffset == 0 && inputCount == input.Length)
+                    {
+                        zopfliInput = input;
+                    }
+                    else
+                    {
+                        zopfliInput = new byte[inputCount];
+                        Buffer.BlockCopy(input, inputOffset, zopfliInput, 0, inputCount);
+                    }
 
                     ZopfliDeflater zstream = new ZopfliDeflater(output);
                     zstream.NumberOfIterations = (int)flavor;
                     zstream.MasterBlockSize = 0;
-                    zstream.Deflate(bytesToCompress, true);
+                    zstream.Deflate(zopfliInput, true);
                     break;
 
                 case CompressionMethod.LZ77:
@@ -55,97 +68,101 @@ namespace HPIZ
                     throw new InvalidOperationException("Unknow compression method");
             }
 
-            WriteAdler32(bytesToCompress, output);
+            WriteAdler32(input, inputOffset, inputCount, output);
 
-            output.Position = 0;
-            writer.Write(Chunk.Header);
-            writer.Write(Chunk.DefaultVersion);
-            writer.Write((byte)CompressionMethod.ZLibDeflate);
-            writer.Write(NoObfuscation);
-            writer.Write((int)output.Length - OverheadSize);
-            writer.Write(bytesToCompress.Length);
+            byte[] outputBytes = output.GetBuffer();
+            int outputLength = checked((int)output.Length);
+            int compressedSize = outputLength - OverheadSize;
+            int checksum = ComputeChecksum(outputBytes, OverheadSize, compressedSize);
 
-            output.Position = OverheadSize;
-            int checksum = ComputeChecksum(output);
-            output.Position = 15;
-            writer.Write(checksum);
+            WriteInt32LittleEndian(outputBytes, 0, Header);
+            outputBytes[4] = DefaultVersion;
+            outputBytes[5] = (byte)CompressionMethod.ZLibDeflate;
+            outputBytes[6] = NoObfuscation;
+            WriteInt32LittleEndian(outputBytes, 7, compressedSize);
+            WriteInt32LittleEndian(outputBytes, 11, inputCount);
+            WriteInt32LittleEndian(outputBytes, 15, checksum);
 
-            return output;
+            output.Dispose();
+            return new BinaryBuffer(outputBytes, 0, outputLength);
         }
 
-        internal static byte[] Decompress(MemoryStream bytesToDecompress)
+        internal static int Decompress(
+            byte[] input,
+            int inputOffset,
+            int inputCount,
+            byte[] output,
+            int outputOffset)
         {
-            if (bytesToDecompress == null)
-                throw new ArgumentNullException(nameof(bytesToDecompress));
-            if (bytesToDecompress.Length - bytesToDecompress.Position < OverheadSize)
+            if (input == null)
+                throw new ArgumentNullException(nameof(input));
+            if (output == null)
+                throw new ArgumentNullException(nameof(output));
+            if (inputOffset < 0 || inputCount < 0 || inputOffset > input.Length - inputCount)
+                throw new ArgumentOutOfRangeException();
+            if (inputCount < OverheadSize)
                 throw new InvalidDataException("Chunk is smaller than its header.");
 
-            BinaryReader reader = new BinaryReader(bytesToDecompress);
-            int headerMark = reader.ReadInt32();
+            int headerMark = ReadInt32LittleEndian(input, inputOffset);
             if (headerMark != Header) throw new InvalidDataException("Invalid Chunk Header");
 
-            int version = reader.ReadByte();
+            int version = input[inputOffset + 4];
             if (version != DefaultVersion) throw new NotImplementedException("Unsuported Chunk Version");
 
-            CompressionMethod FlagCompression = (CompressionMethod)reader.ReadByte();
+            CompressionMethod FlagCompression = (CompressionMethod)input[inputOffset + 5];
             if (FlagCompression != CompressionMethod.LZ77 && FlagCompression != CompressionMethod.ZLibDeflate)
                 throw new InvalidOperationException("Unknown compression method in Chunk header");
 
-            bool IsObfuscated = reader.ReadBoolean();
-            int CompressedSize = reader.ReadInt32();
-            int DecompressedSize = reader.ReadInt32();
-            int checksum = reader.ReadInt32();
+            bool IsObfuscated = input[inputOffset + 6] != 0;
+            int CompressedSize = ReadInt32LittleEndian(input, inputOffset + 7);
+            int DecompressedSize = ReadInt32LittleEndian(input, inputOffset + 11);
+            int checksum = ReadInt32LittleEndian(input, inputOffset + 15);
 
-            if (CompressedSize < 0 || CompressedSize > bytesToDecompress.Length - bytesToDecompress.Position)
+            if (CompressedSize < 0 || CompressedSize > inputCount - OverheadSize)
                 throw new InvalidDataException("Invalid compressed chunk size.");
             if (DecompressedSize < 0 || DecompressedSize > MaxSize)
                 throw new InvalidDataException("Invalid decompressed chunk size.");
+            if (outputOffset < 0 || outputOffset > output.Length - DecompressedSize)
+                throw new InvalidDataException("Decompressed chunk exceeds the output buffer.");
 
-            byte[] compressedData = reader.ReadBytes(CompressedSize);
-            if (compressedData.Length != CompressedSize)
-                throw new EndOfStreamException("Chunk ended before all compressed bytes were read.");
+            int compressedOffset = inputOffset + OverheadSize;
 
-            if (ComputeChecksum(compressedData) != checksum) throw new InvalidDataException("Bad Chunk Checksum");
+            if (ComputeChecksum(input, compressedOffset, CompressedSize) != checksum)
+                throw new InvalidDataException("Bad Chunk Checksum");
 
             if (IsObfuscated)
+            {
+                byte[] clarifiedData = new byte[CompressedSize];
                 for (int j = 0; j < CompressedSize; ++j)
-                    compressedData[j] = (byte)((compressedData[j] - j) ^ j);
+                    clarifiedData[j] = (byte)((input[compressedOffset + j] - j) ^ j);
 
-            byte[] outputBuffer = new byte[DecompressedSize];
+                input = clarifiedData;
+                compressedOffset = 0;
+            }
+
             if (FlagCompression == CompressionMethod.LZ77)
-                LZ77.Decompress(compressedData, outputBuffer);
+                LZ77.Decompress(input, compressedOffset, CompressedSize, output, outputOffset, DecompressedSize);
+            else
+                ZLibDeflater.Decompress(input, compressedOffset, CompressedSize, output, outputOffset, DecompressedSize);
 
-            if (FlagCompression == CompressionMethod.ZLibDeflate)
-                ZLibDeflater.Decompress(compressedData, outputBuffer);
-
-            return outputBuffer;
+            return DecompressedSize;
         }
 
-        private static int ComputeChecksum(byte[] data)
+        private static int ComputeChecksum(byte[] data, int offset, int count)
         {
             int sum = 0;
-            for (int i = 0; i < data.Length; ++i)
+            int end = offset + count;
+            for (int i = offset; i < end; ++i)
                 sum += data[i];
             return sum;
         }
 
-        private static int ComputeChecksum(Stream data)
-        {
-            int sum = 0;
-            int b = 0;
-            while (b != -1)
-            {
-                sum += b;
-                b = data.ReadByte();
-            }
-            return sum;
-        }
-
-        private static void WriteAdler32(byte[] data, Stream output)
+        private static void WriteAdler32(byte[] data, int offset, int count, Stream output)
         {
             ulong s1 = 1;
             ulong s2 = 0;
-            for (int i = 0; i < data.Length; i++) //Maximum SUM operations without MOD is 380368695, big enough for the chunk size
+            int end = offset + count;
+            for (int i = offset; i < end; i++)
             {
                 s1 += data[i];
                 s2 += s1;
@@ -155,11 +172,26 @@ namespace HPIZ
 
             uint sum = (uint)((s2 << 16) | s1);
 
-            var outputBytes = BitConverter.GetBytes(sum);
-            if (BitConverter.IsLittleEndian)
-                Array.Reverse(outputBytes);
+            output.WriteByte((byte)(sum >> 24));
+            output.WriteByte((byte)(sum >> 16));
+            output.WriteByte((byte)(sum >> 8));
+            output.WriteByte((byte)sum);
+        }
 
-            output.Write(outputBytes, 0, outputBytes.Length);
+        private static int ReadInt32LittleEndian(byte[] buffer, int offset)
+        {
+            return buffer[offset]
+                | (buffer[offset + 1] << 8)
+                | (buffer[offset + 2] << 16)
+                | (buffer[offset + 3] << 24);
+        }
+
+        private static void WriteInt32LittleEndian(byte[] buffer, int offset, int value)
+        {
+            buffer[offset] = (byte)value;
+            buffer[offset + 1] = (byte)(value >> 8);
+            buffer[offset + 2] = (byte)(value >> 16);
+            buffer[offset + 3] = (byte)(value >> 24);
         }
     }
 }

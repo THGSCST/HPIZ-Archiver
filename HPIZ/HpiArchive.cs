@@ -3,13 +3,14 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
-using System.Linq;
 using System.Text;
 
 namespace HPIZ
 {
     public class HpiArchive : IDisposable
     {
+        private static readonly Encoding CodePage437 = Encoding.GetEncoding(437);
+        private const string ReservedFileNameCharacters = "<>\":/\\|?*";
         internal const int HeaderMarker = 0x49504148; //HAPI Header
         internal const int DefaultVersion = 0x00010000;
         internal const int NoObfuscationKey = 0;
@@ -17,6 +18,7 @@ namespace HPIZ
 
         internal readonly Stream archiveStream;
         internal readonly int obfuscationKey;
+        private readonly object archiveStreamLock = new object();
         private readonly SortedDictionary<string, FileEntry> entriesDictionary;
         public ReadOnlyDictionary<string, FileEntry> Entries { get; }
 
@@ -91,15 +93,22 @@ namespace HPIZ
                         throw new InvalidDataException("Compressed entries cannot have zero chunks.");
 
                     archiveStream.Position = entriesDictionary[entry].CompressedDataOffset;
-                    var buffer = archiveReader.ReadBytes(chunkCount * 4);
-                    if (buffer.Length != chunkCount * 4)
-                        throw new EndOfStreamException("Archive ended before the chunk table was read.");
-
-                    if (obfuscationKey != 0)
-                        Clarify(buffer, (int)entriesDictionary[entry].CompressedDataOffset);
-
                     var size = new int[chunkCount];
-                    Buffer.BlockCopy(buffer, 0, size, 0, buffer.Length);
+                    if (obfuscationKey == 0)
+                    {
+                        for (int i = 0; i < chunkCount; i++)
+                            size[i] = archiveReader.ReadInt32();
+                    }
+                    else
+                    {
+                        var buffer = archiveReader.ReadBytes(chunkCount * 4);
+                        if (buffer.Length != chunkCount * 4)
+                            throw new EndOfStreamException("Archive ended before the chunk table was read.");
+
+                        Clarify(buffer, (int)entriesDictionary[entry].CompressedDataOffset);
+                        Buffer.BlockCopy(buffer, 0, size, 0, buffer.Length);
+                    }
+
                     long compressedDataSize = 0;
                     foreach (int chunkSize in size)
                     {
@@ -122,6 +131,26 @@ namespace HPIZ
                         + (long)entriesDictionary[entry].UncompressedSize;
                     if (uncompressedEnd > archiveStream.Length)
                         throw new InvalidDataException("Stored entry points beyond the end of the archive.");
+                }
+            }
+        }
+
+        internal void ReadExactlyAt(long position, byte[] buffer, int offset, int count)
+        {
+            lock (archiveStreamLock)
+            {
+                archiveStream.Position = position;
+                int totalBytesRead = 0;
+                while (totalBytesRead < count)
+                {
+                    int bytesRead = archiveStream.Read(
+                        buffer,
+                        offset + totalBytesRead,
+                        count - totalBytesRead);
+                    if (bytesRead == 0)
+                        throw new EndOfStreamException("Archive ended before all requested bytes were read.");
+
+                    totalBytesRead += bytesRead;
                 }
             }
         }
@@ -176,20 +205,24 @@ namespace HPIZ
 
         private static string ReadStringCP437NullTerminated(BinaryReader reader)
         {
-            var bytes = new Queue<byte>();
-            byte b = reader.ReadByte();
-            while (b != 0)
+            byte[] bytes = new byte[32];
+            int count = 0;
+            while (true)
             {
-                bytes.Enqueue(b);
-                b = reader.ReadByte();
+                byte value = reader.ReadByte();
+                if (value == 0)
+                    break;
+
+                if (count == bytes.Length)
+                    Array.Resize(ref bytes, bytes.Length * 2);
+                bytes[count++] = value;
             }
 
-            var characters = Encoding.GetEncoding(437).GetChars(bytes.ToArray());
-
-            char[] reserved = { '<', '>', '\"', ':', '/', '\\', '|', '?', '*', };
+            var characters = CodePage437.GetChars(bytes, 0, count);
 
             for (int i = 0; i < characters.Length; i++)
-                if (char.IsControl(characters[i]) || reserved.Contains(characters[i]))
+                if (char.IsControl(characters[i])
+                    || ReservedFileNameCharacters.IndexOf(characters[i]) >= 0)
                     characters[i] = '_'; //Replace control or reserved char with underscore
 
             return new string(characters);

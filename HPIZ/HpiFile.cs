@@ -9,6 +9,7 @@ namespace HPIZ
 {
     public static class HpiFile
     {
+        private static readonly Encoding CodePage437 = Encoding.GetEncoding(437);
 
         public static HpiArchive Open(string archiveFileName)
         {
@@ -285,10 +286,7 @@ namespace HPIZ
                             file.Value.CompressedDataOffset = (uint)chunkWriter.BaseStream.Position;
 
                             if (file.Value.FlagCompression != CompressionMethod.StoreUncompressed)
-                            {
-                                foreach (var size in file.Value.CompressedChunkSizes)
-                                    chunkWriter.Write(size);
-                            }
+                                WriteInt32Array(chunkWriter.BaseStream, file.Value.CompressedChunkSizes);
 
                             foreach (var chunk in file.Value.ChunkBytes)
                                 chunk.WriteTo(chunkWriter.BaseStream);
@@ -303,12 +301,14 @@ namespace HPIZ
 
                     // Write mandatory end string
                     string mandatoryEndString = $"Copyright {DateTime.Now.Year} Cavedog Entertainment";
-                    chunkWriter.Write(Encoding.GetEncoding(437).GetBytes(mandatoryEndString));
+                    chunkWriter.Write(CodePage437.GetBytes(mandatoryEndString));
 
                     // Write header to a memory stream
-                    using (var headerStream = new MemoryStream())
+                    byte[] headerBytes = new byte[chunkStartPosition];
+                    using (var headerStream = new MemoryStream(headerBytes, true))
                     using (var headerWriter = new BinaryWriter(headerStream))
                     {
+                        headerStream.SetLength(0);
                         headerWriter.Write(HpiArchive.HeaderMarker);
                         headerWriter.Write(HpiArchive.DefaultVersion);
                         headerWriter.Write(chunkStartPosition);
@@ -318,10 +318,9 @@ namespace HPIZ
                         var sequence = entries.GetEnumerator();
                         directoryTree.WriteTree(headerWriter, sequence);
 
-                        // Copy header to the beginning of the file
+                        // Write the completed header to the reserved beginning of the archive.
                         fileStream.Position = 0;
-                        headerStream.Position = 0;
-                        headerStream.CopyTo(fileStream);
+                        fileStream.Write(headerBytes, 0, headerBytes.Length);
                     }
 
                     exceedsRecommendedSize = fileStream.Length > int.MaxValue;
@@ -421,9 +420,19 @@ namespace HPIZ
                 if (!disposedEntries.Add(entry) || entry.ChunkBytes == null)
                     continue;
 
-                foreach (var chunk in entry.ChunkBytes)
-                    chunk?.Dispose();
+                Array.Clear(entry.ChunkBytes, 0, entry.ChunkBytes.Length);
             }
+        }
+
+        private static void WriteInt32Array(Stream destination, int[] values)
+        {
+            byte[] bytes = new byte[values.Length * sizeof(int)];
+            Buffer.BlockCopy(values, 0, bytes, 0, bytes.Length);
+            if (!BitConverter.IsLittleEndian)
+                for (int offset = 0; offset < bytes.Length; offset += sizeof(int))
+                    Array.Reverse(bytes, offset, sizeof(int));
+
+            destination.Write(bytes, 0, bytes.Length);
         }
 
     }

@@ -20,17 +20,29 @@ namespace HPIZ
             if (data == null)
                 throw new ArgumentNullException(nameof(data));
 
-            using (var memoryStream = new MemoryStream(data))
-                return CalculateSha256(memoryStream);
+            using (var sha256 = SHA256.Create())
+                return FormatHash(sha256.ComputeHash(data));
         }
 
         private static string CalculateSha256(Stream dataStream)
         {
             using (var sha256 = SHA256.Create())
             {
-                byte[] hash = sha256.ComputeHash(dataStream);
-                return BitConverter.ToString(hash).Replace("-", string.Empty).ToLowerInvariant();
+                return FormatHash(sha256.ComputeHash(dataStream));
             }
+        }
+
+        private static string FormatHash(byte[] hash)
+        {
+            var characters = new char[hash.Length * 2];
+            const string Hex = "0123456789abcdef";
+            for (int i = 0; i < hash.Length; i++)
+            {
+                characters[i * 2] = Hex[hash[i] >> 4];
+                characters[(i * 2) + 1] = Hex[hash[i] & 0x0F];
+            }
+
+            return new string(characters);
         }
     }
 }

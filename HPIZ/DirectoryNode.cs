@@ -8,6 +8,7 @@ namespace HPIZ
 {
     public class DirectoryNode
     {
+        private static readonly Encoding CodePage437 = Encoding.GetEncoding(437);
         internal Dictionary<string, DirectoryNode> Children { get; private set; }
         private DirectoryNode()
         {
@@ -39,7 +40,7 @@ namespace HPIZ
             foreach (var node in Children)
             {
                 totalSize += 9;
-                totalSize += node.Key.Length + 1;
+                totalSize += CodePage437.GetByteCount(node.Key) + 1;
                 if (node.Value.Children.Count != 0)
                     totalSize += node.Value.CalculateTreeSize();
                 else
@@ -60,7 +61,7 @@ namespace HPIZ
                     positionNameOffset = (int)bw.BaseStream.Position + Children.Count * 9;
                 
                 bw.Write(positionNameOffset); //NameOffset;      /* points to the file name */
-                int positionDataOrChild = positionNameOffset + item.Key.Length + 1;
+                int positionDataOrChild = positionNameOffset + CodePage437.GetByteCount(item.Key) + 1;
                 bw.Write(positionDataOrChild); //DataOffset;   /* points to directory data */
                 bool isDirectory = item.Value.Children.Count != 0;
                 bw.Write(isDirectory);
@@ -84,8 +85,7 @@ namespace HPIZ
         }
         private static void WriteStringCP437NullTerminated(BinaryWriter reader, string text)
         {
-            Encoding codePage437 = Encoding.GetEncoding(437);
-            reader.Write(codePage437.GetBytes(text));
+            reader.Write(CodePage437.GetBytes(text));
             reader.Write(byte.MinValue); //Zero byte to end string
         }
     }
