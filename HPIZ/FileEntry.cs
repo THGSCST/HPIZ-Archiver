@@ -40,6 +40,16 @@ namespace HPIZ
         }
 
         public FileEntry(byte[] uncompressedBytes, CompressionMethod flavor, string reportProgressFileName, IProgress<string> progress)
+            : this(uncompressedBytes, flavor, reportProgressFileName, progress, true)
+        {
+        }
+
+        internal FileEntry(
+            byte[] uncompressedBytes,
+            CompressionMethod flavor,
+            string reportProgressFileName,
+            IProgress<string> progress,
+            bool parallelizeChunks)
         {
             UncompressedSize = uncompressedBytes.Length;
             if (flavor != CompressionMethod.StoreUncompressed && uncompressedBytes.Length > Strategy.DeflateBreakEven) //Skip compression of small files
@@ -69,7 +79,8 @@ namespace HPIZ
 
                     // Zopfli itself is intentionally sequential within a chunk. Parallelism
                     // belongs here, between independent chunks, so it is never nested.
-                    if (CompressedChunkSizes.Length >= MinimumChunksForParallelCompression)
+                    if (parallelizeChunks
+                        && CompressedChunkSizes.Length >= MinimumChunksForParallelCompression)
                         Parallel.For(0, CompressedChunkSizes.Length, ChunkParallelOptions, compressChunk);
                     else
                         for (int j = 0; j < CompressedChunkSizes.Length; j++)

@@ -1,15 +1,21 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Threading.Tasks;
 
 namespace HPIZ
 {
     public static class HpiFile
     {
         private static readonly Encoding CodePage437 = Encoding.GetEncoding(437);
+        private static readonly ParallelOptions FileCompressionParallelOptions = new ParallelOptions
+        {
+            MaxDegreeOfParallelism = Math.Max(1, Math.Min(Environment.ProcessorCount, 16))
+        };
 
         public static HpiArchive Open(string archiveFileName)
         {
@@ -106,21 +112,20 @@ namespace HPIZ
 
             var files = new SortedDictionary<string, FileEntry>(StringComparer.OrdinalIgnoreCase);
             var errors = new List<FileOperationError>();
+            var sourceItems = sources
+                .Where(source => !duplicates.ContainsKey(source.Key))
+                .ToArray();
+            var compressedEntries = new FileEntry[sourceItems.Length];
+            var parallelErrors = new ConcurrentBag<FileOperationError>();
+            bool parallelizeFiles = flavor != CompressionMethod.StoreUncompressed
+                && sourceItems.Length >= FileCompressionParallelOptions.MaxDegreeOfParallelism;
 
-            foreach (var filePath in sources.Keys)
+            Action<int> compressSource = index =>
             {
-                var sourcePath = sources[filePath];
+                string filePath = sourceItems[index].Key;
+                string sourcePath = sourceItems[index].Value;
                 try
                 {
-                    string duplicateSource;
-                    FileEntry duplicateSourceEntry;
-                    if (duplicates.TryGetValue(filePath, out duplicateSource)
-                        && files.TryGetValue(duplicateSource, out duplicateSourceEntry))
-                    {
-                        files.Add(filePath, duplicateSourceEntry);
-                        continue;
-                    }
-
                     //Check if source path is a directory or HPI archive
                     if (Directory.Exists(sourcePath))
                     {
@@ -129,7 +134,12 @@ namespace HPIZ
                         if (file.Length > Int32.MaxValue)
                             throw new Exception("File is too large: " + filePath + ". Maximum allowed size is 2GBytes.");
                         byte[] buffer = File.ReadAllBytes(fullName);
-                        files.Add(filePath, new FileEntry(buffer, flavor, fullName, progress));
+                        compressedEntries[index] = new FileEntry(
+                            buffer,
+                            flavor,
+                            fullName,
+                            progress,
+                            !parallelizeFiles);
                     }
                     else //Is HPI archive
                     {
@@ -141,13 +151,44 @@ namespace HPIZ
                             using (var archive = Open(sourcePath))
                                 buffer = archive.Entries[filePath].Uncompress();
 
-                        files.Add(filePath, new FileEntry(buffer, flavor, filePath, progress));
+                        compressedEntries[index] = new FileEntry(
+                            buffer,
+                            flavor,
+                            filePath,
+                            progress,
+                            !parallelizeFiles);
                     }
                 }
                 catch (Exception ex)
                 {
-                    errors.Add(new FileOperationError(filePath, ex));
+                    parallelErrors.Add(new FileOperationError(filePath, ex));
                 }
+            };
+
+            if (parallelizeFiles)
+                Parallel.For(0, sourceItems.Length, FileCompressionParallelOptions, compressSource);
+            else
+                for (int i = 0; i < sourceItems.Length; i++)
+                    compressSource(i);
+
+            for (int i = 0; i < sourceItems.Length; i++)
+            {
+                if (compressedEntries[i] != null)
+                    files.Add(sourceItems[i].Key, compressedEntries[i]);
+            }
+
+            errors.AddRange(parallelErrors.OrderBy(error => error.FilePath, StringComparer.OrdinalIgnoreCase));
+
+            foreach (var duplicate in duplicates)
+            {
+                FileEntry duplicateSourceEntry;
+                if (files.TryGetValue(duplicate.Value, out duplicateSourceEntry))
+                    files.Add(duplicate.Key, duplicateSourceEntry);
+                else
+                    errors.Add(new FileOperationError(
+                        duplicate.Key,
+                        new InvalidDataException(
+                            $"Duplicate source '{duplicate.Value}' was not available.")));
             }
 
             var validDuplicates = new SortedDictionary<string, string>(StringComparer.OrdinalIgnoreCase);
