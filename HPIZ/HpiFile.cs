@@ -12,7 +12,11 @@ namespace HPIZ
 
         public static HpiArchive Open(string archiveFileName)
         {
-            var stream = new FileStream(archiveFileName, FileMode.Open, FileAccess.Read, FileShare.Read);
+            var stream = new FileStream(
+                archiveFileName,
+                FileMode.Open,
+                FileAccess.Read,
+                FileShare.ReadWrite | FileShare.Delete);
             try
             {
                 return new HpiArchive(stream);
@@ -68,7 +72,7 @@ namespace HPIZ
                             cache.Add(source, archive);
                         }
 
-                        File.WriteAllBytes(fullName, archive.Entries[filePath].Uncompress());
+                        WriteExtractedFile(fullName, archive.Entries[filePath].Uncompress());
                         extractedFileCount++;
                         progress?.Report(filePath);
                     }
@@ -107,6 +111,15 @@ namespace HPIZ
                 var sourcePath = sources[filePath];
                 try
                 {
+                    string duplicateSource;
+                    FileEntry duplicateSourceEntry;
+                    if (duplicates.TryGetValue(filePath, out duplicateSource)
+                        && files.TryGetValue(duplicateSource, out duplicateSourceEntry))
+                    {
+                        files.Add(filePath, duplicateSourceEntry);
+                        continue;
+                    }
+
                     //Check if source path is a directory or HPI archive
                     if (Directory.Exists(sourcePath))
                     {
@@ -141,8 +154,15 @@ namespace HPIZ
                 if (files.ContainsKey(duplicate.Key) && files.ContainsKey(duplicate.Value))
                     validDuplicates.Add(duplicate.Key, duplicate.Value);
 
-            bool exceedsRecommendedSize = WriteToFile(destinationArchiveFileName, files, validDuplicates);
-            return new ArchiveCreationResult(files.Count, exceedsRecommendedSize, errors);
+            try
+            {
+                bool exceedsRecommendedSize = WriteToFile(destinationArchiveFileName, files, validDuplicates);
+                return new ArchiveCreationResult(files.Count, exceedsRecommendedSize, errors);
+            }
+            finally
+            {
+                DisposeEntryBuffers(files.Values);
+            }
         }
 
         public static SortedDictionary<string, string> FindDuplicateContent(FilePathCollection sources, Dictionary<string, HpiArchive> cache = null)
@@ -355,10 +375,55 @@ namespace HPIZ
                 File.Move(temporaryFileName, destinationFileName);
         }
 
+        private static void WriteExtractedFile(string destinationFileName, byte[] contents)
+        {
+            string destinationDirectory = Path.GetDirectoryName(destinationFileName);
+            string temporaryFileName = Path.Combine(
+                destinationDirectory,
+                Path.GetFileName(destinationFileName) + "." + Guid.NewGuid().ToString("N") + ".tmp");
+
+            try
+            {
+                using (var fileStream = new FileStream(temporaryFileName, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+                {
+                    fileStream.Write(contents, 0, contents.Length);
+                }
+
+                ReplaceDestinationFile(temporaryFileName, destinationFileName);
+            }
+            finally
+            {
+                if (File.Exists(temporaryFileName))
+                {
+                    try
+                    {
+                        File.Delete(temporaryFileName);
+                    }
+                    catch
+                    {
+                        // Preserve the original extraction result; a stale temp file is recoverable.
+                    }
+                }
+            }
+        }
+
         private static void DisposeArchives(IEnumerable<HpiArchive> archives)
         {
             foreach (var archive in archives)
                 archive.Dispose();
+        }
+
+        private static void DisposeEntryBuffers(IEnumerable<FileEntry> entries)
+        {
+            var disposedEntries = new HashSet<FileEntry>();
+            foreach (var entry in entries)
+            {
+                if (!disposedEntries.Add(entry) || entry.ChunkBytes == null)
+                    continue;
+
+                foreach (var chunk in entry.ChunkBytes)
+                    chunk?.Dispose();
+            }
         }
 
     }

@@ -24,6 +24,10 @@ namespace HPIZ
         {
             if (stream == null)
                 throw new ArgumentNullException(nameof(stream));
+            if (!stream.CanRead || !stream.CanSeek)
+                throw new ArgumentException("Archive stream must be readable and seekable.", nameof(stream));
+            if (stream.Length < HeaderSize)
+                throw new InvalidDataException("Archive is smaller than the HPI header.");
 
             archiveStream = stream;
             BinaryReader archiveReader = new BinaryReader(archiveStream);
@@ -40,10 +44,13 @@ namespace HPIZ
                 throw new NotImplementedException("Unknown version number");
 
             int directorySize = archiveReader.ReadInt32();
-
             obfuscationKey = archiveReader.ReadInt32();
-
             int directoryStart = archiveReader.ReadInt32();
+
+            if (directorySize < HeaderSize || directorySize > archiveStream.Length)
+                throw new InvalidDataException("Invalid HPI directory size.");
+            if (directoryStart < HeaderSize || directoryStart > directorySize - 8)
+                throw new InvalidDataException("Invalid HPI directory offset.");
 
             if (obfuscationKey != 0)
             {
@@ -51,6 +58,8 @@ namespace HPIZ
 
                 archiveReader.BaseStream.Position = 0;
                 var buffer = archiveReader.ReadBytes(directorySize);
+                if (buffer.Length != directorySize)
+                    throw new EndOfStreamException("Archive ended before the complete directory was read.");
                 Clarify(buffer, 0);
                 archiveReader = new BinaryReader(new MemoryStream(buffer));
             }
@@ -63,7 +72,13 @@ namespace HPIZ
             entriesDictionary = new SortedDictionary<string, FileEntry>(StringComparer.OrdinalIgnoreCase);
             Entries = new ReadOnlyDictionary<string, FileEntry>(entriesDictionary);
 
-            GetEntries(rootNumberOfEntries, rootOffset, archiveReader, string.Empty);
+            GetEntries(
+                rootNumberOfEntries,
+                rootOffset,
+                archiveReader,
+                string.Empty,
+                new HashSet<int>(),
+                0);
 
             archiveReader = new BinaryReader(archiveStream);
 
@@ -72,38 +87,91 @@ namespace HPIZ
                 if (entriesDictionary[entry].FlagCompression != CompressionMethod.StoreUncompressed)
                 {
                     int chunkCount = entriesDictionary[entry].CalculateChunkQuantity();
+                    if (chunkCount == 0)
+                        throw new InvalidDataException("Compressed entries cannot have zero chunks.");
+
                     archiveStream.Position = entriesDictionary[entry].CompressedDataOffset;
                     var buffer = archiveReader.ReadBytes(chunkCount * 4);
+                    if (buffer.Length != chunkCount * 4)
+                        throw new EndOfStreamException("Archive ended before the chunk table was read.");
 
                     if (obfuscationKey != 0)
                         Clarify(buffer, (int)entriesDictionary[entry].CompressedDataOffset);
 
                     var size = new int[chunkCount];
                     Buffer.BlockCopy(buffer, 0, size, 0, buffer.Length);
+                    long compressedDataSize = 0;
+                    foreach (int chunkSize in size)
+                    {
+                        if (chunkSize < Chunk.OverheadSize)
+                            throw new InvalidDataException("Invalid compressed chunk size.");
+                        compressedDataSize += chunkSize;
+                    }
+
+                    long compressedEnd = entriesDictionary[entry].CompressedDataOffset
+                        + (chunkCount * 4L)
+                        + compressedDataSize;
+                    if (compressedEnd > archiveStream.Length)
+                        throw new InvalidDataException("Compressed entry points beyond the end of the archive.");
 
                     entriesDictionary[entry].CompressedChunkSizes = size;
+                }
+                else
+                {
+                    long uncompressedEnd = entriesDictionary[entry].CompressedDataOffset
+                        + (long)entriesDictionary[entry].UncompressedSize;
+                    if (uncompressedEnd > archiveStream.Length)
+                        throw new InvalidDataException("Stored entry points beyond the end of the archive.");
                 }
             }
         }
 
-        private void GetEntries(int NumberOfEntries, int EntryListOffset, BinaryReader reader, string parentPath)
+        private void GetEntries(
+            int numberOfEntries,
+            int entryListOffset,
+            BinaryReader reader,
+            string parentPath,
+            HashSet<int> visitedDirectories,
+            int depth)
         {
-            for (int i = 0; i < NumberOfEntries; ++i)
+            if (depth > 256)
+                throw new InvalidDataException("Archive directory nesting is too deep.");
+            if (numberOfEntries < 0)
+                throw new InvalidDataException("Archive directory has a negative entry count.");
+            if (entryListOffset < 0 || entryListOffset + (numberOfEntries * 9L) > reader.BaseStream.Length)
+                throw new InvalidDataException("Archive directory entry list is outside the directory data.");
+            if (!visitedDirectories.Add(entryListOffset))
+                throw new InvalidDataException("Archive directory contains a cycle.");
+
+            for (int i = 0; i < numberOfEntries; ++i)
             {
-                reader.BaseStream.Position = EntryListOffset + (i * 9);
+                reader.BaseStream.Position = entryListOffset + (i * 9L);
 
                 int nameOffset = reader.ReadInt32();
                 int dataOffset = reader.ReadInt32();
                 bool IsDirectory = reader.ReadBoolean();
+                if (nameOffset < 0 || nameOffset >= reader.BaseStream.Length)
+                    throw new InvalidDataException("Archive entry name is outside the directory data.");
+                if (dataOffset < 0 || dataOffset >= reader.BaseStream.Length)
+                    throw new InvalidDataException("Archive entry data is outside the directory data.");
+
                 reader.BaseStream.Position = nameOffset;
                 var fullPath = Path.Combine(parentPath, ReadStringCP437NullTerminated(reader));
                 reader.BaseStream.Position = dataOffset;
 
                 if (IsDirectory)
-                    GetEntries(reader.ReadInt32(), reader.ReadInt32(), reader, fullPath);
+                    GetEntries(
+                        reader.ReadInt32(),
+                        reader.ReadInt32(),
+                        reader,
+                        fullPath,
+                        visitedDirectories,
+                        depth + 1);
                 else
                     entriesDictionary.Add(fullPath, new FileEntry(reader, this));
             }
+
+            visitedDirectories.Remove(entryListOffset);
         }
 
         private static string ReadStringCP437NullTerminated(BinaryReader reader)

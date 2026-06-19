@@ -542,26 +542,9 @@ namespace HPIZArchiver
             BeginBusyOperation("Compressing... Last processed:", ProgressBarStyle.Continuous);
             try
             {
-                long totalChunks = 0;
-                foreach (ListViewItem item in listViewFiles.CheckedItems)
-                    totalChunks += FileEntry.CalculateChunkQuantity((int)item.SubItems[3].Tag);
-
-                if (totalChunks > int.MaxValue)
-                    throw new InvalidOperationException("The selected files require more progress steps than the interface supports.");
-
-                progressBar.Maximum = Math.Max(1, (int)totalChunks);
-
                 CompressionMethod flavor;
                 if (!Enum.TryParse(flavorLevelComboBox.Text, out flavor))
                     throw new InvalidOperationException("Select a valid compression method.");
-
-                var progress = new Progress<string>(last =>
-                {
-                    secondStatusLabel.Text = last;
-                    if (progressBar.Value < progressBar.Maximum)
-                        progressBar.PerformStep();
-                    TaskbarProgress.SetValue(this.Handle, progressBar.Value, progressBar.Maximum);
-                });
 
                 var sources = GetCheckedFileNames();
                 var duplicateResults = new SortedDictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -580,6 +563,24 @@ namespace HPIZArchiver
                         else if (!duplicateResults.ContainsKey(item))
                             duplicateResults.Add(item, first);
                 }
+
+                long totalChunks = 0;
+                foreach (ListViewItem item in listViewFiles.CheckedItems)
+                    if (!duplicateResults.ContainsKey(item.SubItems[1].Text))
+                        totalChunks += FileEntry.CalculateChunkQuantity((int)item.SubItems[3].Tag);
+
+                if (totalChunks > int.MaxValue)
+                    throw new InvalidOperationException("The selected files require more progress steps than the interface supports.");
+
+                progressBar.Maximum = Math.Max(1, (int)totalChunks);
+
+                var progress = new Progress<string>(last =>
+                {
+                    secondStatusLabel.Text = last;
+                    if (progressBar.Value < progressBar.Maximum)
+                        progressBar.PerformStep();
+                    TaskbarProgress.SetValue(this.Handle, progressBar.Value, progressBar.Maximum);
+                });
 
                 timer.Restart();
                 ArchiveCreationResult result = await Task.Run(

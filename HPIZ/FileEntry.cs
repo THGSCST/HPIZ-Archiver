@@ -20,6 +20,13 @@ namespace HPIZ
             CompressedDataOffset = reader.ReadUInt32();
             UncompressedSize = reader.ReadInt32();
             FlagCompression = (CompressionMethod)reader.ReadByte();
+            if (UncompressedSize < 0)
+                throw new InvalidDataException("Archive entry has a negative uncompressed size.");
+            if (FlagCompression != CompressionMethod.StoreUncompressed
+                && FlagCompression != CompressionMethod.LZ77
+                && FlagCompression != CompressionMethod.ZLibDeflate)
+                throw new InvalidDataException("Archive entry has an unknown compression method.");
+
             parent = parentArchive;
         }
 

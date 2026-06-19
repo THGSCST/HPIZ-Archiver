@@ -75,6 +75,11 @@ namespace HPIZ
 
         internal static byte[] Decompress(MemoryStream bytesToDecompress)
         {
+            if (bytesToDecompress == null)
+                throw new ArgumentNullException(nameof(bytesToDecompress));
+            if (bytesToDecompress.Length - bytesToDecompress.Position < OverheadSize)
+                throw new InvalidDataException("Chunk is smaller than its header.");
+
             BinaryReader reader = new BinaryReader(bytesToDecompress);
             int headerMark = reader.ReadInt32();
             if (headerMark != Header) throw new InvalidDataException("Invalid Chunk Header");
@@ -91,7 +96,14 @@ namespace HPIZ
             int DecompressedSize = reader.ReadInt32();
             int checksum = reader.ReadInt32();
 
+            if (CompressedSize < 0 || CompressedSize > bytesToDecompress.Length - bytesToDecompress.Position)
+                throw new InvalidDataException("Invalid compressed chunk size.");
+            if (DecompressedSize < 0 || DecompressedSize > MaxSize)
+                throw new InvalidDataException("Invalid decompressed chunk size.");
+
             byte[] compressedData = reader.ReadBytes(CompressedSize);
+            if (compressedData.Length != CompressedSize)
+                throw new EndOfStreamException("Chunk ended before all compressed bytes were read.");
 
             if (ComputeChecksum(compressedData) != checksum) throw new InvalidDataException("Bad Chunk Checksum");
 
