@@ -350,15 +350,15 @@
             this.flavorLevelComboBox.Enabled = false;
             this.flavorLevelComboBox.Name = "flavorLevelComboBox";
             this.flavorLevelComboBox.Size = new System.Drawing.Size(182, 66);
-            this.flavorLevelComboBox.ToolTipText = "Select compression level or flavor (defaul is i15 Zopfli Deflate)";
+            this.flavorLevelComboBox.ToolTipText = "Select compression method (default is maximum Zopfli Deflate)";
             // 
             // flavorStripLabel
             // 
             this.flavorStripLabel.Alignment = System.Windows.Forms.ToolStripItemAlignment.Right;
             this.flavorStripLabel.Enabled = false;
             this.flavorStripLabel.Name = "flavorStripLabel";
-            this.flavorStripLabel.Size = new System.Drawing.Size(64, 61);
-            this.flavorStripLabel.Text = "Flavor:";
+            this.flavorStripLabel.Size = new System.Drawing.Size(79, 61);
+            this.flavorStripLabel.Text = "Method:";
             // 
             // toolStripSeparator3
             // 

@@ -1,4 +1,7 @@
-﻿using System;
+﻿using HPIZ;
+using System;
+using System.Collections.Generic;
+using System.IO;
 using System.Windows.Forms;
 
 namespace HPIZArchiver
@@ -6,8 +9,13 @@ namespace HPIZArchiver
     static class Program
     {
         [STAThread]
-        static void Main()
+        static int Main(string[] args)
         {
+            OperationTuning.Initialize();
+
+            if (args.Length > 0)
+                return RunCommandLine(args);
+
             // Set up global exception handlers
             Application.ThreadException += (sender, e) => ShowException(e.Exception);
             AppDomain.CurrentDomain.UnhandledException += (sender, e) =>
@@ -20,6 +28,53 @@ namespace HPIZArchiver
 
             Application.EnableVisualStyles();
             Application.Run(new MainForm());
+            return 0;
+        }
+
+        private static int RunCommandLine(string[] args)
+        {
+            try
+            {
+                if (args.Length < 2
+                    || args.Length > 3
+                    || !string.Equals(args[0], "-r", StringComparison.OrdinalIgnoreCase))
+                    throw new ArgumentException("Usage: HPIZ Archiver.exe -r <archive> [destination]");
+
+                string source = Path.GetFullPath(args[1]);
+                string destination = args.Length >= 3
+                    ? Path.GetFullPath(args[2])
+                    : Path.Combine(
+                        Path.GetDirectoryName(source),
+                        Path.GetFileNameWithoutExtension(source) + ".repacked" + Path.GetExtension(source));
+
+                using (var archive = HpiFile.Open(source))
+                {
+                    var sources = new FilePathCollection();
+
+                    foreach (var entry in archive.Entries)
+                        sources.Add(entry.Key, source);
+
+                    var cache = new Dictionary<string, HpiArchive>(StringComparer.OrdinalIgnoreCase)
+                    {
+                        { source, archive }
+                    };
+                    var duplicates = HpiFile.FindDuplicateContent(sources, cache);
+                    ArchiveCreationResult result = HpiFile.CreateFromManySources(
+                        sources,
+                        destination,
+                        CompressionMethod.ZopfliDeflate,
+                        null,
+                        cache,
+                        duplicates);
+
+                    return result.Errors.Count == 0 ? 0 : 2;
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine(ex);
+                return 1;
+            }
         }
 
         // Method to display exception messages

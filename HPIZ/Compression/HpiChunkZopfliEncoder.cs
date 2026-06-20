@@ -2,176 +2,70 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 
-namespace CompressSharper.Zopfli
+namespace HPIZ.Compression
 {
     /// <summary>
-    /// Produces raw DEFLATE streams using iterative Zopfli LZ77 optimization.
+    /// Encodes one independent HPI chunk with a Zopfli-derived optimizer.
+    /// This is not a general-purpose Zopfli or DEFLATE API.
     /// </summary>
-    public sealed class ZopfliDeflater
+    internal sealed class HpiChunkZopfliEncoder
     {
         /// <summary>
-        /// Creates a compressor that writes to <paramref name="stream"/>.
+        /// Creates an encoder for one HPI chunk.
         /// </summary>
-        /// <param name="stream">Writable destination for the raw DEFLATE stream.</param>
-        public ZopfliDeflater(Stream stream)
+        /// <param name="stream">Writable destination for the raw DEFLATE payload.</param>
+        internal HpiChunkZopfliEncoder(Stream stream)
         {
             if (stream == null)
-                throw new ArgumentNullException("stream", "stream cannot be null");
-
+                throw new ArgumentNullException(nameof(stream));
             if (!stream.CanWrite)
-                throw new ArgumentException("stream must be writable", "stream");
+                throw new ArgumentException("Stream must be writable.", nameof(stream));
 
             _writer = new BitWriter(stream);
-
-            MasterBlockSize = 1000000;
-            MaximumChainHits = 8192;
-            UseCache = true;
-            NumberOfIterations = 15;
-            MaximumBlockSplitting = 15;
-            BlockSplitting = BlockSplitting.First;
-            UseLazyMatching = true;
         }
 
         private const int CacheLength = 8;
-
+        internal const int MaxChunkSize = global::HPIZ.Chunk.MaxSize;
         private const int MaximumMatch = 258;
-
-        private const int MaximumUncompressedBlockSize = 65535;
-
         private const int MinimumMatch = 3;
-
         private const int WindowMask = (WindowSize - 1);
-
         private const int WindowSize = 32768;
         private const int HuffmanNodePoolSize = 8866;
+        private const int MaximumBlockSplitting = 15;
+        private const int MaximumChainHits = 8192;
+        private const int NumberOfIterations = 15;
+
+        // i15 is the only Zopfli mode. It is a hard cap, while converged data can stop early
+        // after the randomized cost model has had enough passes to explore.
+        private const int MinIterationsBeforeEarlyExit = 7;
+        private const int MaxIterationsWithoutImprovement = 3;
+        private const double MeaningfulImprovementBits = 8.0;
 
         private readonly BitWriter _writer;
-
-        /// <summary>Gets or sets when dynamic blocks are split.</summary>
-        public BlockSplitting BlockSplitting { get; set; }
-
-        /// <summary>
-        /// Gets or sets the independently optimized master-block size, or zero to disable it.
-        /// </summary>
-        public int MasterBlockSize { get; set; }
-
-        /// <summary>Gets or sets the maximum number of dynamic-block split points.</summary>
-        public int MaximumBlockSplitting { get; set; }
-
-        /// <summary>Gets or sets the maximum hash-chain candidates examined per match.</summary>
-        public int MaximumChainHits { get; set; }
-
-        /// <summary>Gets or sets the number of iterative optimal-LZ77 passes.</summary>
-        public int NumberOfIterations { get; set; }
-
-        /// <summary>Gets or sets whether longest-match results are cached.</summary>
-        public bool UseCache { get; set; }
-
-        /// <summary>Gets or sets whether the initial greedy pass uses lazy matching.</summary>
-        public bool UseLazyMatching { get; set; }
-
-        /// <summary>Compresses the complete buffer as dynamic DEFLATE blocks.</summary>
-        /// <param name="buffer">Non-empty input buffer.</param>
-        /// <param name="finalBlock">Whether the emitted block terminates the stream.</param>
-        public void Deflate(byte[] buffer, bool finalBlock)
-        {
-            Deflate(buffer, finalBlock, BlockType.Dynamic);
-        }
-
-        /// <summary>Compresses the complete buffer using the requested block encoding.</summary>
-        /// <param name="buffer">Non-empty input buffer.</param>
-        /// <param name="finalBlock">Whether the emitted block terminates the stream.</param>
-        /// <param name="blockType">Block encoding to emit.</param>
-        public void Deflate(byte[] buffer, bool finalBlock, BlockType blockType)
-        {
-            ValidateBufferRange(buffer, 0, buffer == null ? 0 : buffer.Length);
-            ValidateOptions(blockType, true);
-
-            if (MasterBlockSize == 0 && blockType != BlockType.Uncompressed)
-            {
-                DeflatePart(buffer, 0, buffer.Length, blockType, finalBlock);
-            }
-            else
-            {
-                int maxBlockSize = (blockType == BlockType.Uncompressed) ? MaximumUncompressedBlockSize : MasterBlockSize;
-
-                for (int i = 0; i < buffer.Length; i += maxBlockSize)
-                {
-                    bool masterFinal = (i + maxBlockSize >= buffer.Length);
-                    DeflatePart(buffer, i, i + (masterFinal ? buffer.Length - i : maxBlockSize), blockType, finalBlock && masterFinal);
-                }
-            }
-
-            if (finalBlock)
-            {
-                _writer.FlushBits();
-            }
-        }
+        private int _chunkStart;
+        private bool _used;
 
         /// <summary>
-        /// Compresses a non-empty buffer range and uses preceding bytes as its dictionary.
+        /// Compresses one independent HPI chunk as a complete raw DEFLATE stream.
         /// </summary>
-        /// <param name="buffer">Input buffer containing the range and optional dictionary.</param>
-        /// <param name="bufferStart">Inclusive range start.</param>
-        /// <param name="bufferEnd">Exclusive range end.</param>
-        /// <param name="blockType">Block encoding to emit.</param>
-        /// <param name="finalBlock">Whether the emitted block terminates the stream.</param>
-        public void DeflatePart(byte[] buffer, int bufferStart, int bufferEnd, BlockType blockType, bool finalBlock)
+        internal void EncodeChunk(byte[] buffer, int offset, int count)
         {
-            ValidateBufferRange(buffer, bufferStart, bufferEnd);
-            ValidateOptions(blockType, false);
-
-            if (blockType == BlockType.Uncompressed)
-            {
-                DeflateNonCompressedBlock(buffer, bufferStart, bufferEnd, finalBlock);
-            }
-            else if (blockType == BlockType.Fixed || BlockSplitting == BlockSplitting.None)
-            {
-                DeflateBlock(buffer, bufferStart, bufferEnd, blockType, finalBlock);
-            }
-            else if (BlockSplitting == BlockSplitting.First)
-            {
-                DeflateSplittingFirst(buffer, bufferStart, bufferEnd, finalBlock);
-            }
-            else if (BlockSplitting == BlockSplitting.Last)
-            {
-                DeflateSplittingLast(buffer, bufferStart, bufferEnd, finalBlock);
-            }
-            else
-            {
-                throw new ArgumentOutOfRangeException(nameof(BlockSplitting));
-            }
-        }
-
-        private void ValidateOptions(BlockType blockType, bool validateMasterBlockSize)
-        {
-            if (blockType < BlockType.Uncompressed || blockType > BlockType.Dynamic)
-                throw new ArgumentOutOfRangeException(nameof(blockType));
-
-            if (blockType != BlockType.Uncompressed && MaximumChainHits < 0)
-                throw new InvalidOperationException("MaximumChainHits cannot be negative.");
-            if (validateMasterBlockSize && blockType != BlockType.Uncompressed && MasterBlockSize < 0)
-                throw new InvalidOperationException("MasterBlockSize cannot be negative.");
-
-            if (blockType == BlockType.Dynamic)
-            {
-                if (BlockSplitting < BlockSplitting.None || BlockSplitting > BlockSplitting.Last)
-                    throw new ArgumentOutOfRangeException(nameof(BlockSplitting));
-                if (NumberOfIterations < 1)
-                    throw new InvalidOperationException("NumberOfIterations must be at least 1.");
-                if (MaximumBlockSplitting < 0)
-                    throw new InvalidOperationException("MaximumBlockSplitting cannot be negative.");
-            }
-        }
-
-        private static void ValidateBufferRange(byte[] buffer, int bufferStart, int bufferEnd)
-        {
+            if (_used)
+                throw new InvalidOperationException("A chunk encoder instance cannot be reused.");
             if (buffer == null)
                 throw new ArgumentNullException(nameof(buffer));
-            if (bufferStart < 0 || bufferStart >= buffer.Length)
-                throw new ArgumentOutOfRangeException(nameof(bufferStart));
-            if (bufferEnd <= bufferStart || bufferEnd > buffer.Length)
-                throw new ArgumentOutOfRangeException(nameof(bufferEnd));
+            if (offset < 0 || count <= 0 || offset > buffer.Length - count)
+                throw new ArgumentOutOfRangeException();
+            if (count > MaxChunkSize)
+                throw new ArgumentOutOfRangeException(
+                    nameof(count),
+                    "The specialized engine accepts at most one 65,536-byte HPI chunk.");
+
+            _used = true;
+            _chunkStart = offset;
+            int end = offset + count;
+            DeflateSplittingFirst(buffer, offset, end, true);
+            _writer.FlushBits();
         }
 
         private List<int> BlockSplit(byte[] buffer, int bufferStart, int bufferEnd)
@@ -230,48 +124,14 @@ namespace CompressSharper.Zopfli
             }
         }
 
-        private void DeflateSplittingLast(byte[] buffer, int bufferStart, int bufferEnd, bool finalBlock)
-        {
-            BlockState blockState = new BlockState(this)
-            {
-                _blockStart = bufferStart,
-                _blockEnd = bufferEnd,
-                _cache = UseCache ? new LongestMatchCache(bufferEnd - bufferStart) : null
-            };
-
-            var store = blockState.FindOptimalBlock(buffer);
-
-            var splitPoints = store.BlockSplit(MaximumBlockSplitting);
-            var splitPointCount = splitPoints.Count;
-
-            for (int i = 0; i <= splitPointCount; i++)
-            {
-                var splitStart = i == 0 ? 0 : splitPoints[i - 1];
-                var splitEnd = i == splitPointCount ? store.Size : splitPoints[i];
-
-                store.WriteBlock(splitStart, splitEnd, i == splitPointCount && finalBlock, _writer);
-            }
-        }
-
-        private void DeflateBlock(byte[] buffer, int bufferStart, int bufferEnd, BlockType blockType, bool finalBlock)
-        {
-            if (blockType == BlockType.Fixed)
-            {
-                DeflateFixedBlock(buffer, bufferStart, bufferEnd, finalBlock);
-            }
-            else
-            {
-                DeflateDynamicBlock(buffer, bufferStart, bufferEnd, finalBlock, false);
-            }
-        }
-
         private BlockStore DeflateDynamicBlock(byte[] buffer, int blockStart, int blockEnd, bool finalBlock, bool delayWrite)
         {
+            var cache = LongestMatchCache.Rent(blockEnd - blockStart);
             BlockState blockState = new BlockState(this)
             {
                 _blockStart = blockStart,
                 _blockEnd = blockEnd,
-                _cache = UseCache ? new LongestMatchCache(blockEnd - blockStart) : null
+                _cache = cache
             };
 
             var store = blockState.FindOptimalBlock(buffer);
@@ -288,6 +148,8 @@ namespace CompressSharper.Zopfli
                 }
             }
 
+            LongestMatchCache.Return(cache);
+
             if (!delayWrite)
             {
                 store.WriteBlock(0, store.Size, finalBlock, _writer);
@@ -295,43 +157,6 @@ namespace CompressSharper.Zopfli
             }
 
             return store;
-        }
-
-        private void DeflateFixedBlock(byte[] buffer, int bufferStart, int bufferEnd, bool finalBlock)
-        {
-            BlockState blockState = new BlockState(this)
-            {
-                _blockStart = bufferStart,
-                _blockEnd = bufferEnd,
-                _cache = (UseCache) ? new LongestMatchCache(bufferEnd - bufferStart) : null
-            };
-
-            var store = blockState.FindOptimalFixedBlock(buffer);
-
-            store.WriteBlock(0, store.Size, finalBlock, _writer);
-        }
-
-        private void DeflateNonCompressedBlock(byte[] buffer, int bufferStart, int bufferEnd, bool finalBlock)
-        {
-            unchecked
-            {
-
-                _writer.Write(finalBlock);
-                _writer.Write(0, 2);
-
-                _writer.FlushBits();
-
-                int count = bufferEnd - bufferStart;
-                int ncount = ~count;
-
-                _writer.Write(new byte[]
-                {
-                    (byte) count,  (byte) (count >> 8),
-                    (byte) ncount, (byte) (ncount >> 8)
-                });
-
-                _writer.Write(buffer, bufferStart, count);
-            }
         }
 
         private class SymbolStatistics
@@ -349,22 +174,18 @@ namespace CompressSharper.Zopfli
             {
             }
 
-            public static SymbolStatistics CalculateWeighted(SymbolStatistics stats1, double w1, SymbolStatistics stats2, double w2)
+            public void CalculateWeighted(SymbolStatistics other, double thisWeight, double otherWeight)
             {
-                SymbolStatistics ret = new SymbolStatistics();
-
                 int i;
                 for (i = 0; i < 288; i++)
-                    ret._litlens[i] = (int)(stats1._litlens[i] * w1 + stats2._litlens[i] * w2);
+                    _litlens[i] = (int)(_litlens[i] * thisWeight + other._litlens[i] * otherWeight);
 
                 for (i = 0; i < 32; i++)
-                    ret._dists[i] = (int)(stats1._dists[i] * w1 + stats2._dists[i] * w2);
+                    _dists[i] = (int)(_dists[i] * thisWeight + other._dists[i] * otherWeight);
 
-                ret._litlens[256] = 1;
+                _litlens[256] = 1;
 
-                ret.Calculate();
-
-                return ret;
+                Calculate();
             }
 
             public void Calculate()
@@ -391,17 +212,12 @@ namespace CompressSharper.Zopfli
                         freqs[i] = freqs[(int)(state.Next() % (uint)n)];
             }
 
-            public SymbolStatistics Copy()
+            public void CopyFrom(SymbolStatistics source)
             {
-                var ret = new SymbolStatistics();
-
-                Array.Copy(_litlens, ret._litlens, _litlens.Length);
-                Array.Copy(_dists, ret._dists, _dists.Length);
-
-                Array.Copy(_literalLengthSymbolLengths, ret._literalLengthSymbolLengths, _literalLengthSymbolLengths.Length);
-                Array.Copy(_distanceSymbolLengths, ret._distanceSymbolLengths, _distanceSymbolLengths.Length);
-
-                return ret;
+                Array.Copy(source._litlens, _litlens, _litlens.Length);
+                Array.Copy(source._dists, _dists, _dists.Length);
+                Array.Copy(source._literalLengthSymbolLengths, _literalLengthSymbolLengths, _literalLengthSymbolLengths.Length);
+                Array.Copy(source._distanceSymbolLengths, _distanceSymbolLengths, _distanceSymbolLengths.Length);
             }
 
             private const double kInvLog2 = 1.4426950408889;
@@ -449,6 +265,12 @@ namespace CompressSharper.Zopfli
 
         private sealed class Node
         {
+            [ThreadStatic]
+            private static Node[][] _listsScratch;
+
+            [ThreadStatic]
+            private static Node[] _leavesScratch;
+
             private int _count;
             private int _weight;
             private Node _tail;
@@ -499,10 +321,20 @@ namespace CompressSharper.Zopfli
 
             public static void LengthLimitedCodeLengths(int[] frequencies, int n, int maxBits, ref int[] bitlengths)
             {
-                var lists = new Node[2][] { new Node[maxBits], new Node[maxBits] };
+                Node[][] lists = _listsScratch;
+                if (lists == null)
+                {
+                    lists = new[] { new Node[15], new Node[15] };
+                    _listsScratch = lists;
+                }
 
                 NodePool pool = new NodePool(HuffmanNodePoolSize);
-                var leafList = new List<Node>(n);
+                Node[] leafList = _leavesScratch;
+                if (leafList == null || leafList.Length < n)
+                {
+                    leafList = new Node[n];
+                    _leavesScratch = leafList;
+                }
 
                 int numsymbols = 0;
 
@@ -510,8 +342,7 @@ namespace CompressSharper.Zopfli
                 {
                     if (frequencies[i] > 0)
                     {
-                        leafList.Add(pool.CreateNew(frequencies[i], i, null));
-                        numsymbols++;
+                        leafList[numsymbols++] = pool.CreateNew(frequencies[i], i, null);
                     }
                 }
 
@@ -528,10 +359,7 @@ namespace CompressSharper.Zopfli
                     return;
                 }
 
-                leafList.Sort((a, b) => {
-                    if (a._weight != b._weight) return a._weight.CompareTo(b._weight);
-                    else return a._count.CompareTo(b._count);
-                });
+                Array.Sort(leafList, 0, numsymbols, NodeWeightComparer.Instance);
 
                 Node node0 = pool.CreateNew(leafList[0]._weight, 1, null);
                 Node node1 = pool.CreateNew(leafList[1]._weight, 2, null);
@@ -554,7 +382,7 @@ namespace CompressSharper.Zopfli
                 pool.ReturnPool();
             }
 
-            private static void BoundaryPackageMerge(ref Node[][] lists, NodePool pool, int maxbits, List<Node> leaves, int numsymbols, int index, bool final)
+            private static void BoundaryPackageMerge(ref Node[][] lists, NodePool pool, int maxbits, Node[] leaves, int numsymbols, int index, bool final)
             {
                 int lastcount = lists[1][index]._count;
 
@@ -599,7 +427,7 @@ namespace CompressSharper.Zopfli
                 }
             }
 
-            private static void ExtractBitLengths(Node chain, List<Node> leaves, ref int[] bitlengths)
+            private static void ExtractBitLengths(Node chain, Node[] leaves, ref int[] bitlengths)
             {
 
                 for (Node node = chain; node != null; node = node._tail)
@@ -610,13 +438,53 @@ namespace CompressSharper.Zopfli
                     }
                 }
             }
+
+            private sealed class NodeWeightComparer : IComparer<Node>
+            {
+                internal static readonly NodeWeightComparer Instance = new NodeWeightComparer();
+
+                public int Compare(Node left, Node right)
+                {
+                    int weightComparison = left._weight.CompareTo(right._weight);
+                    return weightComparison != 0
+                        ? weightComparison
+                        : left._count.CompareTo(right._count);
+                }
+            }
         }
 
         private sealed class BlockStore
         {
             private const int InitialCapacity = 16;
 
-            public BlockStore(BlockType blockType)
+            [ThreadStatic]
+            private static BlockSizeScratch _blockSizeScratch;
+
+            [ThreadStatic]
+            private static DynamicTreeScratch _dynamicTreeScratch;
+
+            [ThreadStatic]
+            private static WriteBlockScratch _writeBlockScratch;
+
+            [ThreadStatic]
+            private static DynamicLengthsScratch _dynamicLengthsScratch;
+
+            [ThreadStatic]
+            private static bool[] _goodForRleScratch;
+
+            // Blocked prefix-sum histograms used only while this store is being block-split.
+            // Flat checkpoint tables: _llPrefix[k*288 + sym] / _dPrefix[k*32 + sym] hold the
+            // symbol counts over [0, k<<PrefixShiftBits). They turn CalculateLZ77Counts over a
+            // range into O(#symbols + step) instead of O(range). Buffers are pooled per thread.
+            private const int PrefixShiftBits = 8; // checkpoint every 256 LZ77 symbols
+
+            [ThreadStatic]
+            private static int[] _llPrefixScratch;
+
+            [ThreadStatic]
+            private static int[] _dPrefixScratch;
+
+            public BlockStore(ChunkBlockType blockType)
             {
                 _blockType = blockType;
             }
@@ -625,10 +493,16 @@ namespace CompressSharper.Zopfli
 
             internal ushort[] _literalLengths;
 
-            private readonly BlockType _blockType;
+            private readonly ChunkBlockType _blockType;
             private int _count;
 
+            private int _prefixShift; // 0 = prefix histograms inactive
+            private int[] _llPrefix;
+            private int[] _dPrefix;
+
             public int Size => _count;
+
+            public ChunkBlockType BlockType => _blockType;
 
             public void Add(int length, int distance)
             {
@@ -655,15 +529,21 @@ namespace CompressSharper.Zopfli
 
             public void WriteBlock(int start, int end, bool finalBlock, BitWriter writer)
             {
+                WriteBlockScratch scratch = _writeBlockScratch
+                    ?? (_writeBlockScratch = new WriteBlockScratch());
+                int[] ll_lengths = scratch.LiteralLengthLengths;
+                int[] d_lengths = scratch.DistanceLengths;
+                int[] ll_symbols = scratch.LiteralLengthSymbols;
+                int[] d_symbols = scratch.DistanceSymbols;
 
-                int[] ll_lengths = new int[288];
-                int[] d_lengths = new int[32];
-                int[] ll_symbols = new int[288];
-                int[] d_symbols = new int[32];
+                Array.Clear(ll_lengths, 0, ll_lengths.Length);
+                Array.Clear(d_lengths, 0, d_lengths.Length);
+                Array.Clear(ll_symbols, 0, ll_symbols.Length);
+                Array.Clear(d_symbols, 0, d_symbols.Length);
 
                 writer.Write(finalBlock);
 
-                if (_blockType == BlockType.Fixed)
+                if (_blockType == ChunkBlockType.Fixed)
                 {
                     writer.Write(true);
                     writer.Write(false);
@@ -675,7 +555,7 @@ namespace CompressSharper.Zopfli
                     writer.Write(false);
                     writer.Write(true);
 
-                    GetDynamicLengths(start, end, out ll_lengths, out d_lengths);
+                    GetDynamicLengths(start, end, ll_lengths, d_lengths);
                     AddDynamicTree(ll_lengths, d_lengths, writer);
                 }
 
@@ -726,22 +606,28 @@ namespace CompressSharper.Zopfli
             private static int AddDynamicTree(int[] ll_lengths, int[] d_lengths, BitWriter writer)
             {
                 bool writeOutput = writer != null;
-                int[] lld_lengths;
+                DynamicTreeScratch scratch = _dynamicTreeScratch
+                    ?? (_dynamicTreeScratch = new DynamicTreeScratch());
+                int[] lld_lengths = scratch.LldLengths;
+                int[] rle = scratch.Rle;
+                int[] rleBits = scratch.RleBits;
+                int[] clcounts = scratch.CodeLengthCounts;
+                int[] clcl = scratch.CodeLengthLengths;
+                int[] clsymbols = scratch.CodeLengthSymbols;
                 int lld_total;
-                List<int> rle = new List<int>(320);
-                List<int> rle_bits = new List<int>(320);
+                int rleCount = 0;
                 int hlit = 29;
                 int hdist = 29;
                 int hclen;
-                int[] clcounts = new int[19];
-                int[] clcl = new int[19];
-                int[] clsymbols = new int[19];
+
+                Array.Clear(clcounts, 0, clcounts.Length);
+                Array.Clear(clcl, 0, clcl.Length);
+                Array.Clear(clsymbols, 0, clsymbols.Length);
 
                 while (hlit > 0 && ll_lengths[257 + hlit - 1] == 0) hlit--;
                 while (hdist > 0 && d_lengths[1 + hdist - 1] == 0) hdist--;
 
                 lld_total = hlit + 257 + hdist + 1;
-                lld_lengths = new int[lld_total];
 
                 for (int i = 0; i < lld_total; i++)
                 {
@@ -764,39 +650,39 @@ namespace CompressSharper.Zopfli
                             if (count > 10)
                             {
                                 if (count > 138) count = 138;
-                                rle.Add(18);
-                                rle_bits.Add(count - 11);
+                                rle[rleCount] = 18;
+                                rleBits[rleCount++] = count - 11;
                             }
                             else
                             {
-                                rle.Add(17);
-                                rle_bits.Add(count - 3);
+                                rle[rleCount] = 17;
+                                rleBits[rleCount++] = count - 3;
                             }
                         }
                         else
                         {
                             int repeat = count - 1;
 
-                            rle.Add(lld_lengths[i]);
-                            rle_bits.Add(0);
+                            rle[rleCount] = lld_lengths[i];
+                            rleBits[rleCount++] = 0;
 
                             while (repeat >= 6)
                             {
-                                rle.Add(16);
-                                rle_bits.Add(6 - 3);
+                                rle[rleCount] = 16;
+                                rleBits[rleCount++] = 3;
                                 repeat -= 6;
                             }
                             if (repeat >= 3)
                             {
-                                rle.Add(16);
-                                rle_bits.Add(3 - 3);
+                                rle[rleCount] = 16;
+                                rleBits[rleCount++] = 0;
 
                                 repeat -= 3;
                             }
                             while (repeat != 0)
                             {
-                                rle.Add(lld_lengths[i]);
-                                rle_bits.Add(0);
+                                rle[rleCount] = lld_lengths[i];
+                                rleBits[rleCount++] = 0;
                                 repeat--;
                             }
                         }
@@ -805,12 +691,12 @@ namespace CompressSharper.Zopfli
                     }
                     else
                     {
-                        rle.Add(lld_lengths[i]);
-                        rle_bits.Add(0);
+                        rle[rleCount] = lld_lengths[i];
+                        rleBits[rleCount++] = 0;
                     }
                 }
 
-                for (int i = 0; i < rle.Count; i++)
+                for (int i = 0; i < rleCount; i++)
                 {
                     clcounts[rle[i]]++;
                 }
@@ -839,7 +725,7 @@ namespace CompressSharper.Zopfli
                     bitSize += 3;
                 }
 
-                for (int i = 0; i < rle.Count; i++)
+                for (int i = 0; i < rleCount; i++)
                 {
                     int symbol = clsymbols[rle[i]];
 
@@ -851,21 +737,21 @@ namespace CompressSharper.Zopfli
                     if (rle[i] == 16)
                     {
                         if (writeOutput)
-                            writer.Write(rle_bits[i], 2);
+                            writer.Write(rleBits[i], 2);
 
                         bitSize += 2;
                     }
                     else if (rle[i] == 17)
                     {
                         if (writeOutput)
-                            writer.Write(rle_bits[i], 3);
+                            writer.Write(rleBits[i], 3);
 
                         bitSize += 3;
                     }
                     else if (rle[i] == 18)
                     {
                         if (writeOutput)
-                            writer.Write(rle_bits[i], 7);
+                            writer.Write(rleBits[i], 7);
 
                         bitSize += 7;
                     }
@@ -883,11 +769,17 @@ namespace CompressSharper.Zopfli
                 for (int i = 0; i < 32; i++) d_lengths[i] = 5;
             }
 
-            private static void ConvertLengthsToSymbols(int[] lengths, int symbolSize, int maxbits, ref int[] symbols)
+            private static unsafe void ConvertLengthsToSymbols(int[] lengths, int symbolSize, int maxbits, ref int[] symbols)
             {
-                int[] blCount = new int[maxbits + 1];
-                int[] nextCode = new int[(maxbits + 1)];
+                int* blCount = stackalloc int[16];
+                int* nextCode = stackalloc int[16];
                 int bits;
+
+                for (int i = 0; i <= maxbits; i++)
+                {
+                    blCount[i] = 0;
+                    nextCode[i] = 0;
+                }
 
                 for (int i = 0; i < symbolSize; i++)
                 {
@@ -935,13 +827,19 @@ namespace CompressSharper.Zopfli
 
             public long CalculateBlockSize(int start, int end)
             {
-                int[] literalLengthCounts = new int[288];
-                int[] distanceCounts = new int[32];
+                BlockSizeScratch scratch = _blockSizeScratch
+                    ?? (_blockSizeScratch = new BlockSizeScratch());
+                int[] literalLengthCounts = scratch.LiteralLengthCounts;
+                int[] distanceCounts = scratch.DistanceCounts;
+                int[] literalLengthLengths = scratch.LiteralLengthLengths;
+                int[] distanceLengths = scratch.DistanceLengths;
 
-                int[] literalLengthLengths = new int[288];
-                int[] distanceLengths = new int[32];
+                Array.Clear(literalLengthCounts, 0, literalLengthCounts.Length);
+                Array.Clear(distanceCounts, 0, distanceCounts.Length);
+                Array.Clear(literalLengthLengths, 0, literalLengthLengths.Length);
+                Array.Clear(distanceLengths, 0, distanceLengths.Length);
 
-                if (_blockType == BlockType.Fixed)
+                if (_blockType == ChunkBlockType.Fixed)
                 {
                     GetFixedTree(ref literalLengthLengths, ref distanceLengths);
 
@@ -957,27 +855,36 @@ namespace CompressSharper.Zopfli
                     + CalculateBlockSymbolSizeGivenCounts(literalLengthCounts, distanceCounts, literalLengthLengths, distanceLengths);
             }
 
-            private void GetDynamicLengths(int start, int end, out int[] ll_lengths, out int[] d_lengths)
+            private void GetDynamicLengths(int start, int end, int[] ll_lengths, int[] d_lengths)
             {
-                int[] ll_counts = new int[288];
-                int[] d_counts = new int[32];
+                DynamicLengthsScratch scratch = _dynamicLengthsScratch
+                    ?? (_dynamicLengthsScratch = new DynamicLengthsScratch());
+                int[] ll_counts = scratch.LiteralLengthCounts;
+                int[] d_counts = scratch.DistanceCounts;
+                int[] ll_counts2 = scratch.OptimizedLiteralLengthCounts;
+                int[] d_counts2 = scratch.OptimizedDistanceCounts;
+                int[] ll_lengths2 = scratch.OptimizedLiteralLengthLengths;
+                int[] d_lengths2 = scratch.OptimizedDistanceLengths;
+
+                Array.Clear(ll_counts, 0, ll_counts.Length);
+                Array.Clear(d_counts, 0, d_counts.Length);
+                Array.Clear(ll_lengths, 0, ll_lengths.Length);
+                Array.Clear(d_lengths, 0, d_lengths.Length);
+                Array.Clear(ll_lengths2, 0, ll_lengths2.Length);
+                Array.Clear(d_lengths2, 0, d_lengths2.Length);
                 CalculateLZ77Counts(start, end, ref ll_counts, ref d_counts);
 
-                ll_lengths = new int[288];
-                d_lengths = new int[32];
                 CalculateBitLengths(ll_counts, 288, 15, ref ll_lengths);
                 CalculateBitLengths(d_counts, 32, 15, ref d_lengths);
                 PatchDistanceCodesForBuggyDecoders(d_lengths);
                 long size1 = CalculateDynamicTreeSize(ll_lengths, d_lengths)
                     + CalculateBlockSymbolSizeGivenCounts(ll_counts, d_counts, ll_lengths, d_lengths);
 
-                int[] ll_counts2 = (int[])ll_counts.Clone();
-                int[] d_counts2 = (int[])d_counts.Clone();
+                Array.Copy(ll_counts, ll_counts2, ll_counts.Length);
+                Array.Copy(d_counts, d_counts2, d_counts.Length);
                 OptimizeHuffmanCountsForRle(32, d_counts2);
                 OptimizeHuffmanCountsForRle(288, ll_counts2);
 
-                int[] ll_lengths2 = new int[288];
-                int[] d_lengths2 = new int[32];
                 CalculateBitLengths(ll_counts2, 288, 15, ref ll_lengths2);
                 CalculateBitLengths(d_counts2, 32, 15, ref d_lengths2);
                 PatchDistanceCodesForBuggyDecoders(d_lengths2);
@@ -987,8 +894,8 @@ namespace CompressSharper.Zopfli
 
                 if (size2 < size1)
                 {
-                    ll_lengths = ll_lengths2;
-                    d_lengths = d_lengths2;
+                    Array.Copy(ll_lengths2, ll_lengths, ll_lengths.Length);
+                    Array.Copy(d_lengths2, d_lengths, d_lengths.Length);
                 }
             }
 
@@ -1023,7 +930,16 @@ namespace CompressSharper.Zopfli
                     if (counts[length - 1] != 0) break;
                 }
 
-                bool[] goodForRle = new bool[length];
+                bool[] goodForRle = _goodForRleScratch;
+                if (goodForRle == null || goodForRle.Length < length)
+                {
+                    goodForRle = new bool[length];
+                    _goodForRleScratch = goodForRle;
+                }
+                else
+                {
+                    Array.Clear(goodForRle, 0, length);
+                }
 
                 long symbol = counts[0];
                 int stride = 0;
@@ -1098,75 +1014,11 @@ namespace CompressSharper.Zopfli
                     {
                         var dist = _distances[i];
 
-                        int distSymbol;
-                        long distExtraBits;
-
-                        if (dist < 193)
-                        {
-                            if (dist < 13)
-                            {
-                                if (dist < 5) distSymbol = dist - 1;
-                                else if (dist < 7) distSymbol = 4;
-                                else if (dist < 9) distSymbol = 5;
-                                else distSymbol = 6;
-                            }
-                            else
-                            {
-                                if (dist < 17) distSymbol = 7;
-                                else if (dist < 25) distSymbol = 8;
-                                else if (dist < 33) distSymbol = 9;
-                                else if (dist < 49) distSymbol = 10;
-                                else if (dist < 65) distSymbol = 11;
-                                else if (dist < 97) distSymbol = 12;
-                                else if (dist < 129) distSymbol = 13;
-                                else distSymbol = 14;
-                            }
-                        }
-                        else
-                        {
-                            if (dist < 2049)
-                            {
-                                if (dist < 257) distSymbol = 15;
-                                else if (dist < 385) distSymbol = 16;
-                                else if (dist < 513) distSymbol = 17;
-                                else if (dist < 769) distSymbol = 18;
-                                else if (dist < 1025) distSymbol = 19;
-                                else if (dist < 1537) distSymbol = 20;
-                                else distSymbol = 21;
-                            }
-                            else
-                            {
-                                if (dist < 3073) distSymbol = 22;
-                                else if (dist < 4097) distSymbol = 23;
-                                else if (dist < 6145) distSymbol = 24;
-                                else if (dist < 8193) distSymbol = 25;
-                                else if (dist < 12289) distSymbol = 26;
-                                else if (dist < 16385) distSymbol = 27;
-                                else if (dist < 24577) distSymbol = 28;
-                                else distSymbol = 29;
-                            }
-                        }
-
-                        if (dist < 5) distExtraBits = 0;
-                        else if (dist < 9) distExtraBits = 1;
-                        else if (dist < 17) distExtraBits = 2;
-                        else if (dist < 33) distExtraBits = 3;
-                        else if (dist < 65) distExtraBits = 4;
-                        else if (dist < 129) distExtraBits = 5;
-                        else if (dist < 257) distExtraBits = 6;
-                        else if (dist < 513) distExtraBits = 7;
-                        else if (dist < 1025) distExtraBits = 8;
-                        else if (dist < 2049) distExtraBits = 9;
-                        else if (dist < 4097) distExtraBits = 10;
-                        else if (dist < 8193) distExtraBits = 11;
-                        else if (dist < 16385) distExtraBits = 12;
-                        else distExtraBits = 13;
-
                         blockSymbolSize +=
                             ll_lengths[_lengthSymbolTable[_literalLengths[i]]] +
                             _lengthExtraBitsTable[_literalLengths[i]] +
-                            d_lengths[distSymbol] +
-                            distExtraBits;
+                            d_lengths[GetDistSymbol(dist)] +
+                            GetDistExtraBits(dist);
                     }
                 }
 
@@ -1180,69 +1032,117 @@ namespace CompressSharper.Zopfli
 
             private void CalculateLZ77Counts(int start, int end, ref int[] ll_count, ref int[] d_count)
             {
-                for (int i = start; i < end; i++)
+                if (_prefixShift != 0)
                 {
-                    if (_distances[i] == 0)
-                    {
-                        ll_count[_literalLengths[i]]++;
-                    }
-                    else
-                    {
-                        var dist = _distances[i];
-                        int distSymbol;
+                    int shift = _prefixShift;
+                    int es = end >> shift;
+                    int ss = start >> shift;
+                    int eb = es * 288, sb = ss * 288;
+                    for (int k = 0; k < 288; k++)
+                        ll_count[k] += _llPrefix[eb + k] - _llPrefix[sb + k];
+                    int ebd = es * 32, sbd = ss * 32;
+                    for (int k = 0; k < 32; k++)
+                        d_count[k] += _dPrefix[ebd + k] - _dPrefix[sbd + k];
 
-                        if (dist < 193)
+                    // Add the symbols past the end checkpoint, undo the ones before start.
+                    for (int i = es << shift; i < end; i++)
+                    {
+                        if (_distances[i] == 0)
+                            ll_count[_literalLengths[i]]++;
+                        else
                         {
-                            if (dist < 13)
-                            {
-                                if (dist < 5) distSymbol = dist - 1;
-                                else if (dist < 7) distSymbol = 4;
-                                else if (dist < 9) distSymbol = 5;
-                                else distSymbol = 6;
-                            }
-                            else
-                            {
-                                if (dist < 17) distSymbol = 7;
-                                else if (dist < 25) distSymbol = 8;
-                                else if (dist < 33) distSymbol = 9;
-                                else if (dist < 49) distSymbol = 10;
-                                else if (dist < 65) distSymbol = 11;
-                                else if (dist < 97) distSymbol = 12;
-                                else if (dist < 129) distSymbol = 13;
-                                else distSymbol = 14;
-                            }
+                            ll_count[_lengthSymbolTable[_literalLengths[i]]]++;
+                            d_count[GetDistSymbol(_distances[i])]++;
+                        }
+                    }
+                    for (int i = ss << shift; i < start; i++)
+                    {
+                        if (_distances[i] == 0)
+                            ll_count[_literalLengths[i]]--;
+                        else
+                        {
+                            ll_count[_lengthSymbolTable[_literalLengths[i]]]--;
+                            d_count[GetDistSymbol(_distances[i])]--;
+                        }
+                    }
+                }
+                else
+                {
+                    for (int i = start; i < end; i++)
+                    {
+                        if (_distances[i] == 0)
+                        {
+                            ll_count[_literalLengths[i]]++;
                         }
                         else
                         {
-                            if (dist < 2049)
-                            {
-                                if (dist < 257) distSymbol = 15;
-                                else if (dist < 385) distSymbol = 16;
-                                else if (dist < 513) distSymbol = 17;
-                                else if (dist < 769) distSymbol = 18;
-                                else if (dist < 1025) distSymbol = 19;
-                                else if (dist < 1537) distSymbol = 20;
-                                else distSymbol = 21;
-                            }
-                            else
-                            {
-                                if (dist < 3073) distSymbol = 22;
-                                else if (dist < 4097) distSymbol = 23;
-                                else if (dist < 6145) distSymbol = 24;
-                                else if (dist < 8193) distSymbol = 25;
-                                else if (dist < 12289) distSymbol = 26;
-                                else if (dist < 16385) distSymbol = 27;
-                                else if (dist < 24577) distSymbol = 28;
-                                else distSymbol = 29;
-                            }
+                            ll_count[_lengthSymbolTable[_literalLengths[i]]]++;
+                            d_count[GetDistSymbol(_distances[i])]++;
                         }
-
-                        ll_count[_lengthSymbolTable[_literalLengths[i]]]++;
-                        d_count[distSymbol]++;
                     }
                 }
 
                 ll_count[256] = 1;
+            }
+
+            // Build the blocked prefix-sum checkpoints for the current LZ77 symbols. Checkpoint
+            // k covers [0, k<<PrefixShiftBits); the tail past the last checkpoint is recovered by
+            // the partial walk in CalculateLZ77Counts. Buffers are pooled per thread.
+            private void BuildPrefixHistograms()
+            {
+                int shift = PrefixShiftBits;
+                int step = 1 << shift;
+                int needed = (_count >> shift) + 1;
+
+                int llSize = needed * 288;
+                int dSize = needed * 32;
+
+                int[] llPref = _llPrefixScratch;
+                if (llPref == null || llPref.Length < llSize)
+                {
+                    llPref = new int[llSize];
+                    _llPrefixScratch = llPref;
+                }
+                int[] dPref = _dPrefixScratch;
+                if (dPref == null || dPref.Length < dSize)
+                {
+                    dPref = new int[dSize];
+                    _dPrefixScratch = dPref;
+                }
+
+                Array.Clear(llPref, 0, 288);
+                Array.Clear(dPref, 0, 32);
+
+                for (int k = 1; k < needed; k++)
+                {
+                    int baseLL = k * 288;
+                    int baseD = k * 32;
+                    Array.Copy(llPref, baseLL - 288, llPref, baseLL, 288);
+                    Array.Copy(dPref, baseD - 32, dPref, baseD, 32);
+
+                    int to = k * step; // <= _count because k <= (_count >> shift)
+                    for (int i = (k - 1) * step; i < to; i++)
+                    {
+                        if (_distances[i] == 0)
+                            llPref[baseLL + _literalLengths[i]]++;
+                        else
+                        {
+                            llPref[baseLL + _lengthSymbolTable[_literalLengths[i]]]++;
+                            dPref[baseD + GetDistSymbol(_distances[i])]++;
+                        }
+                    }
+                }
+
+                _llPrefix = llPref;
+                _dPrefix = dPref;
+                _prefixShift = shift;
+            }
+
+            private void ReleasePrefixHistograms()
+            {
+                _prefixShift = 0;
+                _llPrefix = null;
+                _dPrefix = null;
             }
 
             public List<int> BlockSplit(int maxBlocks)
@@ -1252,58 +1152,56 @@ namespace CompressSharper.Zopfli
                 if (storeSize < 10)
                     return new List<int>();
 
-                var splitFail = new Dictionary<int, bool>();
+                var splitFail = new List<int>(MaximumBlockSplitting);
 
                 double splitCost1 = 0, splitCost2 = 0, origcost = 0;
 
-                var splitPoints = new List<int>();
+                var splitPoints = new List<int>(MaximumBlockSplitting);
 
                 var storeStart = 0;
                 var storeEnd = storeSize;
 
-                for (int numBlocks = 1; numBlocks < maxBlocks && (storeEnd - storeStart) >= 10;)
+                BuildPrefixHistograms();
+                try
                 {
-                    var llpos = FindMinimum((index) =>
+                    for (int numBlocks = 1; numBlocks < maxBlocks && (storeEnd - storeStart) >= 10;)
                     {
-                        double ec1 = 0;
-                        double ec2 = 0;
+                        var llpos = FindMinimum(this, storeStart, storeEnd, storeStart + 1, storeEnd);
 
-                            ec1 = CalculateBlockSize(storeStart, index);
-                            ec2 = CalculateBlockSize(index, storeEnd);
+                        splitCost1 = CalculateBlockSize(storeStart, llpos);
+                        splitCost2 = CalculateBlockSize(llpos, storeEnd);
+                        origcost = CalculateBlockSize(storeStart, storeEnd);
 
-                        return ec1 + ec2;
-                    }, storeStart + 1, storeEnd);
+                        if ((splitCost1 + splitCost2) > origcost || llpos == storeStart + 1 || llpos == storeEnd)
+                        {
+                            splitFail.Add(storeStart);
+                        }
+                        else
+                        {
+                            splitPoints.Add(llpos);
+                            splitPoints.Sort();
 
-                    splitCost1 = CalculateBlockSize(storeStart, llpos);
-                    splitCost2 = CalculateBlockSize(llpos, storeEnd);
-                    origcost = CalculateBlockSize(storeStart, storeEnd);
+                            numBlocks++;
+                        }
 
-                    if ((splitCost1 + splitCost2) > origcost || llpos == storeStart + 1 || llpos == storeEnd)
-                    {
-                        splitFail[storeStart] = true;
+                        if (!FindLargestSplittableBlock(storeSize, splitFail, splitPoints, ref storeStart, ref storeEnd))
+                        {
+                            break;
+                        }
                     }
-                    else
-                    {
-                        splitPoints.Add(llpos);
-                        splitPoints.Sort();
-
-                        numBlocks++;
-                    }
-
-                    if (!FindLargestSplittableBlock(storeSize, splitFail, splitPoints, ref storeStart, ref storeEnd))
-                    {
-                        break;
-                    }
+                }
+                finally
+                {
+                    ReleasePrefixHistograms();
                 }
 
                 return splitPoints;
             }
 
-            private static int FindMinimum(Func<int, double> function, int start, int end)
+            private static unsafe int FindMinimum(BlockStore store, int blockStart, int blockEnd, int start, int end)
             {
-
-                var point = new int[9];
-                var valuePoint = new double[9];
+                int* point = stackalloc int[9];
+                double* valuePoint = stackalloc double[9];
                 double lastbest = double.MaxValue;
 
                 int position = start;
@@ -1318,7 +1216,8 @@ namespace CompressSharper.Zopfli
                     for (int i = 0; i < 9; i++)
                     {
                         point[i] = start + (i + 1) * mulFactor;
-                        valuePoint[i] = function(point[i]);
+                        valuePoint[i] = store.CalculateBlockSize(blockStart, point[i])
+                            + store.CalculateBlockSize(point[i], blockEnd);
                     }
 
                     int bestIndex = 0;
@@ -1346,7 +1245,7 @@ namespace CompressSharper.Zopfli
                 return position;
             }
 
-            private static bool FindLargestSplittableBlock(int llsize, Dictionary<int, bool> splitFail, List<int> splitPoints, ref int lstart, ref int lend)
+            private static bool FindLargestSplittableBlock(int llsize, List<int> splitFail, List<int> splitPoints, ref int lstart, ref int lend)
             {
                 int longest = 0;
                 bool found = false;
@@ -1358,7 +1257,7 @@ namespace CompressSharper.Zopfli
                     int start = i == 0 ? 0 : splitPoints[i - 1];
                     int end = i == npoints ? llsize - 1 : splitPoints[i];
 
-                    if (!splitFail.ContainsKey(start) && end - start > longest)
+                    if (!splitFail.Contains(start) && end - start > longest)
                     {
                         lstart = start;
                         lend = end;
@@ -1370,9 +1269,10 @@ namespace CompressSharper.Zopfli
                 return found;
             }
 
-            public SymbolStatistics GetStatistics()
+            public void GetStatistics(SymbolStatistics stats)
             {
-                SymbolStatistics stats = new SymbolStatistics();
+                Array.Clear(stats._litlens, 0, stats._litlens.Length);
+                Array.Clear(stats._dists, 0, stats._dists.Length);
 
                 for (int i = 0; i < Size; i++)
                 {
@@ -1390,8 +1290,6 @@ namespace CompressSharper.Zopfli
                 stats._litlens[256] = 0;
 
                 stats.Calculate();
-
-                return stats;
             }
 
             public BlockStore Copy()
@@ -1400,31 +1298,120 @@ namespace CompressSharper.Zopfli
                     return new BlockStore(_blockType);
 
                 BlockStore store = new BlockStore(_blockType);
-                store._literalLengths = new ushort[_count];
-                store._distances = new ushort[_count];
-                store._count = _count;
-                Array.Copy(_literalLengths, store._literalLengths, _count);
-                Array.Copy(_distances, store._distances, _count);
+                store.CopyFrom(this);
                 return store;
+            }
+
+            public void CopyFrom(BlockStore source)
+            {
+                if (source == null)
+                    throw new ArgumentNullException(nameof(source));
+                if (source._blockType != _blockType)
+                    throw new InvalidOperationException("Block types must match.");
+
+                EnsureCapacity(source._count);
+                _count = source._count;
+                if (_count > 0)
+                {
+                    Array.Copy(source._literalLengths, _literalLengths, _count);
+                    Array.Copy(source._distances, _distances, _count);
+                }
+                ReleasePrefixHistograms();
             }
 
             public void TrySetSize(int size)
             {
                 EnsureCapacity(size);
             }
+
+            // Empties the store while keeping its backing arrays for reuse across squeeze
+            // passes. Safe because callers only read [0, Size) and Add overwrites in order.
+            public void Reset()
+            {
+                _count = 0;
+            }
+
+            private sealed class BlockSizeScratch
+            {
+                internal readonly int[] LiteralLengthCounts = new int[288];
+                internal readonly int[] DistanceCounts = new int[32];
+                internal readonly int[] LiteralLengthLengths = new int[288];
+                internal readonly int[] DistanceLengths = new int[32];
+            }
+
+            private sealed class DynamicTreeScratch
+            {
+                internal readonly int[] LldLengths = new int[318];
+                internal readonly int[] Rle = new int[320];
+                internal readonly int[] RleBits = new int[320];
+                internal readonly int[] CodeLengthCounts = new int[19];
+                internal readonly int[] CodeLengthLengths = new int[19];
+                internal readonly int[] CodeLengthSymbols = new int[19];
+            }
+
+            private sealed class WriteBlockScratch
+            {
+                internal readonly int[] LiteralLengthLengths = new int[288];
+                internal readonly int[] DistanceLengths = new int[32];
+                internal readonly int[] LiteralLengthSymbols = new int[288];
+                internal readonly int[] DistanceSymbols = new int[32];
+            }
+
+            private sealed class DynamicLengthsScratch
+            {
+                internal readonly int[] LiteralLengthCounts = new int[288];
+                internal readonly int[] DistanceCounts = new int[32];
+                internal readonly int[] OptimizedLiteralLengthCounts = new int[288];
+                internal readonly int[] OptimizedDistanceCounts = new int[32];
+                internal readonly int[] OptimizedLiteralLengthLengths = new int[288];
+                internal readonly int[] OptimizedDistanceLengths = new int[32];
+            }
         }
 
         private sealed class LongestMatchCache
         {
-            private int[] _dist;
-            private int[] _length;
-            private int[] _sublen;
+            private ushort[] _dist;
+            private ushort[] _length;
+            private byte[] _sublen;
 
-            public LongestMatchCache(int blockSize)
+            // One cache services every squeeze pass of a single block and is then free.
+            // Its backing arrays are the largest per-block allocation (the sublen table is
+            // CacheLength*blockSize*3 bytes, ~1.5 MB on the LOH for a full chunk), so they
+            // are pooled per thread to keep those allocations off the gen-2 GC, which would
+            // otherwise stall the parallel chunk-compression pipeline. Bit-identical output.
+            [ThreadStatic]
+            private static LongestMatchCache _pool;
+
+            private LongestMatchCache() { }
+
+            public static LongestMatchCache Rent(int blockSize)
             {
-                _length = new int[blockSize];
-                _dist = new int[blockSize];
-                _sublen = new int[CacheLength * blockSize * 3];
+                LongestMatchCache cache = _pool ?? new LongestMatchCache();
+                _pool = null;
+                cache.Initialize(blockSize);
+                return cache;
+            }
+
+            public static void Return(LongestMatchCache cache)
+            {
+                _pool = cache;
+            }
+
+            private void Initialize(int blockSize)
+            {
+                if (_length == null || _length.Length < blockSize)
+                {
+                    _length = new ushort[blockSize];
+                    _dist = new ushort[blockSize];
+                }
+                else
+                {
+                    Array.Clear(_dist, 0, blockSize);
+                }
+
+                int sublenLength = CacheLength * blockSize * 3;
+                if (_sublen == null || _sublen.Length < sublenLength)
+                    _sublen = new byte[sublenLength];
 
                 for (int i = 0; i < blockSize; i++)
                     _length[i] = 1;
@@ -1435,21 +1422,22 @@ namespace CompressSharper.Zopfli
 
                 if (sublen != null && !(_length[lmcpos] == 0 || _dist[lmcpos] != 0))
                 {
-                    _dist[lmcpos] = length < MinimumMatch ? 0 : distance;
-                    _length[lmcpos] = length < MinimumMatch ? 0 : length;
+                    _dist[lmcpos] = (ushort)(length < MinimumMatch ? 0 : distance);
+                    _length[lmcpos] = (ushort)(length < MinimumMatch ? 0 : length);
 
                     SublenToCache(sublen, lmcpos, length);
                 }
             }
 
-            public Match? TryGetFromLongestMatchCache(int lmcpos, ref int limit, ref int[] sublen)
+            public bool TryGetFromLongestMatchCache(int lmcpos, ref int limit, ref int[] sublen, out Match match)
             {
-                var length = _length[lmcpos];
-                var distance = _dist[lmcpos];
+                match = default(Match);
+                int length = _length[lmcpos];
+                int distance = _dist[lmcpos];
                 var maxCachedSublen = MaxCachedSublen(lmcpos);
 
-                if (!((length == 0 || distance != 0) && (limit == ZopfliDeflater.MaximumMatch || length <= limit || (sublen.Length > 0 && maxCachedSublen >= limit))))
-                    return null;
+                if (!((length == 0 || distance != 0) && (limit == HpiChunkZopfliEncoder.MaximumMatch || length <= limit || (sublen.Length > 0 && maxCachedSublen >= limit))))
+                    return false;
 
                 if (sublen.Length == 0 || length <= maxCachedSublen)
                 {
@@ -1462,12 +1450,13 @@ namespace CompressSharper.Zopfli
                         CacheToSublen(lmcpos, length, ref sublen);
                         distance = sublen[length];
                     }
-                    return new Match(length, distance);
+                    match = new Match(length, distance);
+                    return true;
                 }
 
                 limit = length;
 
-                return null;
+                return false;
             }
 
             private void CacheToSublen(int pos, int length, ref int[] sublen)
@@ -1518,9 +1507,9 @@ namespace CompressSharper.Zopfli
                 {
                     if (i == length || sublen[i] != sublen[i + 1])
                     {
-                        _sublen[cachePos2++] = i - 3;
-                        _sublen[cachePos2++] = sublen[i] & 0xFF;
-                        _sublen[cachePos2++] = sublen[i] >> 8;
+                        _sublen[cachePos2++] = (byte)(i - 3);
+                        _sublen[cachePos2++] = (byte)sublen[i];
+                        _sublen[cachePos2++] = (byte)(sublen[i] >> 8);
                         bestlength = i;
                         j++;
                         if (j >= CacheLength) break;
@@ -1528,7 +1517,7 @@ namespace CompressSharper.Zopfli
                 }
                 if (j < CacheLength)
                 {
-                    _sublen[cachePos + ((CacheLength - 1) * 3)] = bestlength - 3;
+                    _sublen[cachePos + ((CacheLength - 1) * 3)] = (byte)(bestlength - 3);
                 }
             }
         }
@@ -1654,10 +1643,10 @@ namespace CompressSharper.Zopfli
             return scan;
         }
 
-        private static Hash InitializeHash(byte[] buffer, int bufferStart, int bufferEnd)
+        private static Hash InitializeHash(byte[] buffer, int chunkStart, int bufferStart, int bufferEnd)
         {
-            int windowStart = bufferStart > ZopfliDeflater.WindowSize ? bufferStart - ZopfliDeflater.WindowSize : 0;
-            Hash hash = Hash.Rent(ZopfliDeflater.WindowSize);
+            int windowStart = Math.Max(chunkStart, bufferStart - WindowSize);
+            Hash hash = Hash.Rent(HpiChunkZopfliEncoder.WindowSize);
             hash.WarmUpHash(buffer, windowStart, bufferEnd);
             for (int i = windowStart; i < bufferStart; i++)
             {
@@ -1738,19 +1727,19 @@ namespace CompressSharper.Zopfli
         private sealed class Hash
         {
 
-            internal int[] _hashval;
+            internal ushort[] _hashval;
 
-            internal int[] _hashval2;
+            internal ushort[] _hashval2;
 
-            internal int[] _head;
+            internal ushort[] _head;
 
-            internal int[] _head2;
+            internal ushort[] _head2;
 
-            internal int[] _prev;
+            internal ushort[] _prev;
 
-            internal int[] _prev2;
+            internal ushort[] _prev2;
 
-            internal int[] _same;
+            internal ushort[] _same;
 
             internal int _value;
 
@@ -1760,20 +1749,20 @@ namespace CompressSharper.Zopfli
 
             private const int HashShift = 5;
 
-            private const int HeadSize = 65536;
+            private const int HeadSize = HashMask + 1;
 
             [ThreadStatic]
             private static Hash _pool;
 
             private Hash(int windowSize)
             {
-                _head = new int[HeadSize];
-                _head2 = new int[HeadSize];
-                _prev = new int[windowSize];
-                _prev2 = new int[windowSize];
-                _hashval = new int[windowSize];
-                _hashval2 = new int[windowSize];
-                _same = new int[windowSize];
+                _head = new ushort[HeadSize];
+                _head2 = new ushort[HeadSize];
+                _prev = new ushort[windowSize];
+                _prev2 = new ushort[windowSize];
+                _hashval = new ushort[windowSize];
+                _hashval2 = new ushort[windowSize];
+                _same = new ushort[windowSize];
             }
 
             public static Hash Rent(int windowSize)
@@ -1801,34 +1790,35 @@ namespace CompressSharper.Zopfli
                 _value = 0;
                 _value2 = 0;
 
-                for (int i = 0; i < HeadSize; i++)
-                {
-                    _head[i] = -1;
-                    _head2[i] = -1;
-                }
-
+                Array.Clear(_head, 0, _head.Length);
+                Array.Clear(_head2, 0, _head2.Length);
             }
 
+            [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
             public int GetHashHead(int index, bool useFirstHash)
             {
-                return useFirstHash ? _head[index] : _head2[index];
+                return DecodeHead(useFirstHash ? _head[index] : _head2[index]);
             }
 
+            [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
             public int GetHashPrev(int index, bool useFirstHash)
             {
                 return useFirstHash ? _prev[index] : _prev2[index];
             }
 
+            [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
             public int GetHashValue(bool useFirstHash)
             {
                 return useFirstHash ? _value : _value2;
             }
 
+            [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
             public int GetHashValue(int index, bool useFirstHash)
             {
                 return useFirstHash ? _hashval[index] : _hashval2[index];
             }
 
+            [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
             public int GetSameValue(int index)
             {
                 return _same[index];
@@ -1839,25 +1829,26 @@ namespace CompressSharper.Zopfli
 
                 unchecked
                 {
-                    int hashPosition = position & ZopfliDeflater.WindowMask;
+                    int hashPosition = position & HpiChunkZopfliEncoder.WindowMask;
                     int amount = 0;
 
-                    byte hashValue = (position + ZopfliDeflater.MinimumMatch <= (end)) ? buffer[position + ZopfliDeflater.MinimumMatch - 1] : byte.MinValue;
+                    byte hashValue = (position + HpiChunkZopfliEncoder.MinimumMatch <= (end)) ? buffer[position + HpiChunkZopfliEncoder.MinimumMatch - 1] : byte.MinValue;
 
                     UpdateHashValue(hashValue);
 
-                    _hashval[hashPosition] = _value;
+                    _hashval[hashPosition] = (ushort)_value;
 
-                    if (_head[_value] != -1 && _hashval[_head[_value]] == _value)
-                        _prev[hashPosition] = _head[_value];
+                    int head = DecodeHead(_head[_value]);
+                    if (head != -1 && _hashval[head] == _value)
+                        _prev[hashPosition] = (ushort)head;
 
                     else
-                        _prev[hashPosition] = hashPosition;
+                        _prev[hashPosition] = (ushort)hashPosition;
 
-                    _head[_value] = hashPosition;
+                    _head[_value] = EncodeHead(hashPosition);
 
-                    if (_same[(position - 1) & ZopfliDeflater.WindowMask] > 1)
-                        amount = _same[(position - 1) & ZopfliDeflater.WindowMask] - 1;
+                    if (_same[(position - 1) & HpiChunkZopfliEncoder.WindowMask] > 1)
+                        amount = _same[(position - 1) & HpiChunkZopfliEncoder.WindowMask] - 1;
 
                     while (position + amount + 1 < end &&
                         buffer[position] == buffer[position + amount + 1] && amount < ushort.MaxValue)
@@ -1865,40 +1856,52 @@ namespace CompressSharper.Zopfli
                         amount++;
                     }
 
-                    _same[hashPosition] = amount;
+                    _same[hashPosition] = (ushort)amount;
 
-                    _value2 = ((_same[hashPosition] - ZopfliDeflater.MinimumMatch) & 0xff) ^ _value;
-                    _hashval2[hashPosition] = _value2;
+                    _value2 = ((_same[hashPosition] - HpiChunkZopfliEncoder.MinimumMatch) & 0xff) ^ _value;
+                    _hashval2[hashPosition] = (ushort)_value2;
 
-                    if (_head2[_value2] != -1 && _hashval2[_head2[_value2]] == _value2)
-                        _prev2[hashPosition] = _head2[_value2];
+                    int head2 = DecodeHead(_head2[_value2]);
+                    if (head2 != -1 && _hashval2[head2] == _value2)
+                        _prev2[hashPosition] = (ushort)head2;
 
                     else
-                        _prev2[hashPosition] = hashPosition;
+                        _prev2[hashPosition] = (ushort)hashPosition;
 
-                    _head2[_value2] = hashPosition;
+                    _head2[_value2] = EncodeHead(hashPosition);
                 }
             }
 
             public void WarmUpHash(byte[] buffer, int index, int end)
             {
-                _same[(index - 1) & ZopfliDeflater.WindowMask] = 0;
+                _same[(index - 1) & HpiChunkZopfliEncoder.WindowMask] = 0;
                 UpdateHashValue(index < end ? buffer[index] : byte.MinValue);
                 UpdateHashValue(index + 1 < end ? buffer[index + 1] : byte.MinValue);
             }
 
+            [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
             private void UpdateHashValue(byte value)
             {
                 _value = (((_value) << HashShift) ^ (value)) & HashMask;
+            }
+
+            private static int DecodeHead(ushort value)
+            {
+                return value == 0 ? -1 : value - 1;
+            }
+
+            private static ushort EncodeHead(int value)
+            {
+                return (ushort)(value + 1);
             }
         }
 
         private sealed class BlockState
         {
 
-            public BlockState(ZopfliDeflater deflater)
+            public BlockState(HpiChunkZopfliEncoder engine)
             {
-                _deflater = deflater;
+                _engine = engine;
                 _cache = null;
                 _blockStart = _blockEnd = 0;
             }
@@ -1909,39 +1912,44 @@ namespace CompressSharper.Zopfli
 
             internal LongestMatchCache _cache;
 
-            private ZopfliDeflater _deflater;
+            private readonly HpiChunkZopfliEncoder _engine;
 
             [ThreadStatic]
             private static double[] _costsScratch;
 
             [ThreadStatic]
-            private static int[] _lengthArrayScratch;
+            private static ushort[] _lengthArrayScratch;
 
             [ThreadStatic]
             private static int[] _sublenScratch;
 
-            private static List<int> TraceBackwards(int[] lengthArray, int size)
+            [ThreadStatic]
+            private static ushort[] _pathScratch;
+
+            private static int TraceBackwards(ushort[] lengthArray, int size, out ushort[] path)
             {
-                List<int> pathList = new List<int>();
-
-                if (size <= 1)
-                    return pathList;
-
-                for (int index = size - 1; index > 0; index -= lengthArray[index])
+                path = _pathScratch;
+                int required = Math.Max(0, size - 1);
+                if (path == null || path.Length < required)
                 {
-                    pathList.Add(lengthArray[index]);
+                    path = new ushort[required];
+                    _pathScratch = path;
                 }
 
-                pathList.Reverse();
-                return pathList;
+                if (size <= 1)
+                    return 0;
+
+                int count = 0;
+                for (int index = size - 1; index > 0; index -= lengthArray[index])
+                    path[count++] = (ushort)lengthArray[index];
+
+                Array.Reverse(path, 0, count);
+                return count;
             }
 
             public BlockStore FindStandardBlock(byte[] buffer)
             {
-                if (_deflater.UseLazyMatching)
-                    return FindStandardBlockLazyMatching(buffer);
-
-                return FindStandardBlockNoLazyMatching(buffer);
+                return FindStandardBlockLazyMatching(buffer);
             }
 
             private static int GetLengthScore(int length, int distance)
@@ -1962,9 +1970,9 @@ namespace CompressSharper.Zopfli
                 int previousMatch = 0;
                 bool availableMatch = false;
 
-                var hash = InitializeHash(buffer, bufferStart, bufferEnd);
+                var hash = InitializeHash(buffer, _engine._chunkStart, bufferStart, bufferEnd);
 
-                var store = new BlockStore(BlockType.Dynamic);
+                var store = new BlockStore(ChunkBlockType.Dynamic);
 
                 for (int i = bufferStart; i < bufferEnd; i++)
                 {
@@ -2039,56 +2047,13 @@ namespace CompressSharper.Zopfli
                 return store;
             }
 
-            private BlockStore FindStandardBlockNoLazyMatching(byte[] buffer)
-            {
-
-                var bufferStart = _blockStart;
-                var bufferEnd = _blockEnd;
-
-                int[] dummySubLen = GetSublenScratch();
-
-                var hash = InitializeHash(buffer, bufferStart, bufferEnd);
-
-                var store = new BlockStore(BlockType.Dynamic);
-
-                for (int i = bufferStart; i < bufferEnd; i++)
-                {
-                    hash.UpdateHash(buffer, i, bufferEnd);
-
-                    int limit = MaximumMatch;
-
-                    var match = FindLongestMatch(hash, buffer, i, bufferEnd, ref limit, ref dummySubLen);
-
-                    var length = match._length;
-                    var distance = match._distance;
-
-                    int lengthScore = GetLengthScore(length, distance);
-
-                    if (lengthScore >= MinimumMatch)
-                    {
-                        store.Add(length, distance);
-                    }
-                    else
-                    {
-                        length = 1;
-                        store.Add(buffer[i], 0);
-                    }
-
-                    for (int j = 1; j < length; j++)
-                    {
-                        i++;
-                        hash.UpdateHash(buffer, i, bufferEnd);
-                    }
-                }
-
-                Hash.Return(hash);
-                return store;
-            }
-
             public BlockStore FindOptimalBlock(byte[] buffer)
             {
                 BlockStore bestStore = null;
-                SymbolStatistics beststats = null;
+                var stats = new SymbolStatistics();
+                var nextStats = new SymbolStatistics();
+                var bestStats = new SymbolStatistics();
+                bool hasBestStats = false;
                 double bestCost = double.MaxValue;
                 double lastCost = 0;
 
@@ -2096,37 +2061,62 @@ namespace CompressSharper.Zopfli
                 var randomizeStarted = false;
 
                 var currentStore = FindStandardBlock(buffer);
+                currentStore.GetStatistics(stats);
 
-                var stats = currentStore.GetStatistics();
+                int sinceImprovement = 0;
 
-                for (int i = 0; i < _deflater.NumberOfIterations; i++)
+                // Reuse both stores across squeeze passes. A chunk can improve several times;
+                // retaining the best store's backing arrays avoids repeated large allocations.
+                BlockStore squeezeScratch = null;
+
+                for (int i = 0; i < NumberOfIterations; i++)
                 {
-                    currentStore = OptimalRun(buffer, stats, BlockType.Dynamic);
+                    currentStore = OptimalRun(buffer, stats, ChunkBlockType.Dynamic, squeezeScratch);
+                    squeezeScratch = currentStore;
 
                     var cost = currentStore.CalculateBlockSize(0, currentStore.Size);
 
                     if (cost < bestCost)
                     {
+                        // Sub-byte wins are kept but do not reset the early-exit streak.
+                        if (cost <= bestCost - MeaningfulImprovementBits)
+                            sinceImprovement = 0;
+                        else
+                            sinceImprovement++;
 
-                        bestStore = currentStore.Copy();
-                        beststats = stats.Copy();
+                        if (bestStore == null)
+                            bestStore = new BlockStore(ChunkBlockType.Dynamic);
+                        bestStore.CopyFrom(currentStore);
+                        bestStats.CopyFrom(stats);
+                        hasBestStats = true;
                         bestCost = cost;
                     }
+                    else
+                    {
+                        sinceImprovement++;
+                    }
 
-                    SymbolStatistics lastStats = stats;
-                    stats = currentStore.GetStatistics();
+                    if (i + 1 >= MinIterationsBeforeEarlyExit
+                        && sinceImprovement >= MaxIterationsWithoutImprovement)
+                        break;
+
+                    currentStore.GetStatistics(nextStats);
 
                     if (randomizeStarted)
-                        stats = SymbolStatistics.CalculateWeighted(stats, 1.0, lastStats, 0.5);
+                        nextStats.CalculateWeighted(stats, 1.0, 0.5);
 
                     if (i > 5 && cost == lastCost)
                     {
-                        if (beststats != null) stats = beststats.Copy();
-                        stats.CalculateRandomized(random);
+                        if (hasBestStats)
+                            nextStats.CopyFrom(bestStats);
+                        nextStats.CalculateRandomized(random);
                         randomizeStarted = true;
                     }
 
                     lastCost = cost;
+                    SymbolStatistics previousStats = stats;
+                    stats = nextStats;
+                    nextStats = previousStats;
                 }
 
                 return bestStore;
@@ -2134,20 +2124,21 @@ namespace CompressSharper.Zopfli
 
             public BlockStore FindOptimalFixedBlock(byte[] buffer)
             {
-                return OptimalRun(buffer, null, BlockType.Fixed);
+                return OptimalRun(buffer, null, ChunkBlockType.Fixed);
             }
 
-            private BlockStore OptimalRun(byte[] buffer, SymbolStatistics stats, BlockType blockType)
+            private BlockStore OptimalRun(byte[] buffer, SymbolStatistics stats, ChunkBlockType blockType, BlockStore reuse = null)
             {
                 var lengthArray = GetBestLengths(buffer, stats, blockType);
 
                 int size = (_blockStart == _blockEnd) ? 0 : (_blockEnd - _blockStart) + 1;
-                var path = BlockState.TraceBackwards(lengthArray, size);
+                ushort[] path;
+                int pathCount = BlockState.TraceBackwards(lengthArray, size, out path);
 
-                return FollowPath(buffer, path, blockType);
+                return FollowPath(buffer, path, pathCount, blockType, reuse);
             }
 
-            private BlockStore FollowPath(byte[] buffer, List<int> path, BlockType blockType)
+            private BlockStore FollowPath(byte[] buffer, ushort[] path, int pathCount, ChunkBlockType blockType, BlockStore reuse = null)
             {
                 int bufferStart = _blockStart;
                 int bufferEnd = _blockEnd;
@@ -2157,14 +2148,17 @@ namespace CompressSharper.Zopfli
 
                 int[] dummySubLen = Array.Empty<int>();
 
-                var hash = InitializeHash(buffer, bufferStart, bufferEnd);
+                var hash = InitializeHash(buffer, _engine._chunkStart, bufferStart, bufferEnd);
 
-                var store = new BlockStore(blockType);
+                // Reuse the caller's scratch store across squeeze passes to avoid reallocating
+                // the (up to ~256 KB) symbol arrays every iteration; otherwise allocate.
+                BlockStore store = reuse != null && reuse.BlockType == blockType ? reuse : new BlockStore(blockType);
+                store.Reset();
 
-                store.TrySetSize(path.Count);
+                store.TrySetSize(pathCount);
 
                 var position = bufferStart;
-                for (int i = 0; i < path.Count; i++)
+                for (int i = 0; i < pathCount; i++)
                 {
                     int length = path[i];
                     hash.UpdateHash(buffer, position, bufferEnd);
@@ -2193,26 +2187,26 @@ namespace CompressSharper.Zopfli
                 return store;
             }
 
-            private int[] GetBestLengths(byte[] buffer, SymbolStatistics stats, BlockType blockType)
+            private ushort[] GetBestLengths(byte[] buffer, SymbolStatistics stats, ChunkBlockType blockType)
             {
                 int bufferStart = _blockStart;
                 int bufferEnd = _blockEnd;
 
                 if (bufferStart == bufferEnd)
-                    return Array.Empty<int>();
+                    return Array.Empty<ushort>();
 
                 int blockSize = bufferEnd - bufferStart;
 
                 int[] sublen = null;
-                int[] lengthArray = null;
+                ushort[] lengthArray = null;
                 double[] costs = null;
                 double mincost = 0;
                 double symbolCost = 0;
                 Hash hash = null;
 
                 mincost = GetCostModelMinCost(stats, blockType);
-                symbolCost = GetCost(stats, blockType, ZopfliDeflater.MaximumMatch, 1);
-                hash = InitializeHash(buffer, bufferStart, bufferEnd);
+                symbolCost = GetCost(stats, blockType, HpiChunkZopfliEncoder.MaximumMatch, 1);
+                hash = InitializeHash(buffer, _engine._chunkStart, bufferStart, bufferEnd);
 
                 sublen = GetSublenScratch();
 
@@ -2226,12 +2220,8 @@ namespace CompressSharper.Zopfli
                 lengthArray = _lengthArrayScratch;
                 if (lengthArray == null || lengthArray.Length < blockSize + 1)
                 {
-                    lengthArray = new int[blockSize + 1];
+                    lengthArray = new ushort[blockSize + 1];
                     _lengthArrayScratch = lengthArray;
-                }
-                else
-                {
-                    Array.Clear(lengthArray, 0, blockSize + 1);
                 }
 
                 lengthArray[0] = 0;
@@ -2244,23 +2234,23 @@ namespace CompressSharper.Zopfli
                 {
                     hash.UpdateHash(buffer, bufferIndex, bufferEnd);
 
-                    if (bufferIndex > bufferStart + (ZopfliDeflater.MaximumMatch + 1)
-                        && bufferIndex + ((ZopfliDeflater.MaximumMatch * 2) + 1) < bufferEnd
-                        && hash._same[bufferIndex & ZopfliDeflater.WindowMask] > (ZopfliDeflater.MaximumMatch * 2)
-                        && hash._same[(bufferIndex - ZopfliDeflater.MaximumMatch) & ZopfliDeflater.WindowMask] > ZopfliDeflater.MaximumMatch)
+                    if (bufferIndex > bufferStart + (HpiChunkZopfliEncoder.MaximumMatch + 1)
+                        && bufferIndex + ((HpiChunkZopfliEncoder.MaximumMatch * 2) + 1) < bufferEnd
+                        && hash._same[bufferIndex & HpiChunkZopfliEncoder.WindowMask] > (HpiChunkZopfliEncoder.MaximumMatch * 2)
+                        && hash._same[(bufferIndex - HpiChunkZopfliEncoder.MaximumMatch) & HpiChunkZopfliEncoder.WindowMask] > HpiChunkZopfliEncoder.MaximumMatch)
                     {
 
-                        for (int k = 0; k < ZopfliDeflater.MaximumMatch; k++)
+                        for (int k = 0; k < HpiChunkZopfliEncoder.MaximumMatch; k++)
                         {
-                            costs[lengthArrayIndex + ZopfliDeflater.MaximumMatch] = (costs[lengthArrayIndex] + symbolCost);
-                            lengthArray[lengthArrayIndex + ZopfliDeflater.MaximumMatch] = ZopfliDeflater.MaximumMatch;
+                            costs[lengthArrayIndex + HpiChunkZopfliEncoder.MaximumMatch] = (costs[lengthArrayIndex] + symbolCost);
+                            lengthArray[lengthArrayIndex + HpiChunkZopfliEncoder.MaximumMatch] = HpiChunkZopfliEncoder.MaximumMatch;
                             bufferIndex++;
                             lengthArrayIndex++;
                             hash.UpdateHash(buffer, bufferIndex, bufferEnd);
                         }
                     }
 
-                    var limit = ZopfliDeflater.MaximumMatch;
+                    var limit = HpiChunkZopfliEncoder.MaximumMatch;
 
                     var length = FindLongestMatch(hash, buffer, bufferIndex, bufferEnd, ref limit, ref sublen)._length;
 
@@ -2289,7 +2279,7 @@ namespace CompressSharper.Zopfli
                         if (newCost < costs[lengthArrayIndex + k])
                         {
                             costs[lengthArrayIndex + k] = newCost;
-                            lengthArray[lengthArrayIndex + k] = k;
+                            lengthArray[lengthArrayIndex + k] = (ushort)k;
                         }
                     }
                 }
@@ -2307,7 +2297,7 @@ namespace CompressSharper.Zopfli
                 { 1, 2, 3, 4, 5, 7, 9, 13, 17, 25, 33, 49, 65, 97, 129, 193, 257,
                     385, 513, 769, 1025, 1537, 2049, 3073, 4097, 6145, 8193, 12289, 16385, 24577 };
 
-            private static double GetCostModelMinCost(SymbolStatistics stats, BlockType blockType)
+            private static double GetCostModelMinCost(SymbolStatistics stats, ChunkBlockType blockType)
             {
                 int bestlength = 0;
                 int bestdist = 0;
@@ -2341,11 +2331,11 @@ namespace CompressSharper.Zopfli
             [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
             private static double GetCost(
                 SymbolStatistics stats,
-                BlockType blockType,
+                ChunkBlockType blockType,
                 int literalLength,
                 int distance)
             {
-                if (blockType == BlockType.Fixed)
+                if (blockType == ChunkBlockType.Fixed)
                 {
                     if (distance == 0)
                         return literalLength <= 143 ? 8 : 9;
@@ -2375,16 +2365,19 @@ namespace CompressSharper.Zopfli
                 int bestlength = 1;
                 bool useFirstHashValue = true;
 
-                int chainCounter = _deflater.MaximumChainHits;
+                int chainCounter = MaximumChainHits;
 
                 if (_cache != null)
                 {
 
-                    var match = _cache.TryGetFromLongestMatchCache(bufferStart - _blockStart, ref limit, ref sublen);
-
-                    if (match != null)
+                    Match match;
+                    if (_cache.TryGetFromLongestMatchCache(
+                        bufferStart - _blockStart,
+                        ref limit,
+                        ref sublen,
+                        out match))
                     {
-                        return match.Value;
+                        return match;
                     }
                 }
 
@@ -2393,16 +2386,16 @@ namespace CompressSharper.Zopfli
 
                 int arrayEndPos = bufferStart + limit;
 
-                int hashPosition = bufferStart & ZopfliDeflater.WindowMask;
+                int hashPosition = bufferStart & HpiChunkZopfliEncoder.WindowMask;
                 int previousHashPoint = hash.GetHashHead(hash.GetHashValue(true), true);
                 int hashPoint = hash.GetHashPrev(previousHashPoint, true);
 
-                int dist = ((hashPoint < previousHashPoint) ? previousHashPoint - hashPoint : ((ZopfliDeflater.WindowSize - hashPoint) + previousHashPoint));
+                int dist = ((hashPoint < previousHashPoint) ? previousHashPoint - hashPoint : ((HpiChunkZopfliEncoder.WindowSize - hashPoint) + previousHashPoint));
 
                 fixed (byte* buf = buffer)
                 {
 
-                    while (dist < ZopfliDeflater.WindowSize)
+                    while (dist < HpiChunkZopfliEncoder.WindowSize)
                     {
                         int currentlength = 0;
 
@@ -2414,10 +2407,10 @@ namespace CompressSharper.Zopfli
                             if (bufferStart + bestlength >= bufferEnd ||
                                 buf[scanPosition + bestlength] == buf[matchPosition + bestlength])
                             {
-                                int same0 = hash._same[bufferStart & ZopfliDeflater.WindowMask];
+                                int same0 = hash._same[bufferStart & HpiChunkZopfliEncoder.WindowMask];
                                 if (same0 > 2 && buf[scanPosition] == buf[matchPosition])
                                 {
-                                    int same1 = hash.GetSameValue(((bufferStart - dist) & ZopfliDeflater.WindowMask));
+                                    int same1 = hash.GetSameValue(((bufferStart - dist) & HpiChunkZopfliEncoder.WindowMask));
 
                                     int same = same0 < same1 ? same0 : same1;
 
@@ -2464,7 +2457,7 @@ namespace CompressSharper.Zopfli
                         if (hashPoint == previousHashPoint)
                             break;
 
-                        dist += (hashPoint < previousHashPoint ? previousHashPoint - hashPoint : ((ZopfliDeflater.WindowSize - hashPoint) + previousHashPoint));
+                        dist += (hashPoint < previousHashPoint ? previousHashPoint - hashPoint : ((HpiChunkZopfliEncoder.WindowSize - hashPoint) + previousHashPoint));
 
                         if (--chainCounter < 0)
                             break;
@@ -2498,7 +2491,9 @@ namespace CompressSharper.Zopfli
             _stream = stream;
         }
 
-        private readonly byte[] _buffer = new byte[2];
+        private const int OutputBufferSize = 4096;
+        private readonly byte[] _buffer = new byte[OutputBufferSize];
+        private int _bufferCount;
         private int _bitBuffer;
         private int _bitCount;
         private readonly Stream _stream;
@@ -2507,11 +2502,12 @@ namespace CompressSharper.Zopfli
         {
             if (_bitCount > 0)
             {
-                _buffer[0] = (byte)_bitBuffer;
-                _stream.Write(_buffer, 0, 1);
+                WriteByte((byte)_bitBuffer);
                 _bitCount = 0;
                 _bitBuffer = 0;
             }
+
+            FlushOutputBuffer();
         }
 
         public void Write(bool value)
@@ -2534,7 +2530,10 @@ namespace CompressSharper.Zopfli
         public void Write(byte[] buffer, int offset, int count)
         {
             if (_bitCount == 0)
+            {
+                FlushOutputBuffer();
                 _stream.Write(buffer, offset, count);
+            }
             else
                 for (int i = offset; i < (offset + count); i++)
                     PrivateWrite(buffer[i], 8);
@@ -2564,46 +2563,42 @@ namespace CompressSharper.Zopfli
         {
             if (_bitCount >= 16)
             {
-                _buffer[0] = (byte)_bitBuffer;
-                _buffer[1] = (byte)(_bitBuffer >> 8);
-                _stream.Write(_buffer, 0, 2);
+                WriteByte((byte)_bitBuffer);
+                WriteByte((byte)(_bitBuffer >> 8));
                 _bitCount -= 16;
                 _bitBuffer >>= 16;
             }
 
             else if (_bitCount >= 8)
             {
-                _buffer[0] = (byte)_bitBuffer;
-                _stream.Write(_buffer, 0, 1);
+                WriteByte((byte)_bitBuffer);
                 _bitCount -= 8;
                 _bitBuffer >>= 8;
             }
         }
+
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
+        private void WriteByte(byte value)
+        {
+            if (_bufferCount == _buffer.Length)
+                FlushOutputBuffer();
+
+            _buffer[_bufferCount++] = value;
+        }
+
+        private void FlushOutputBuffer()
+        {
+            if (_bufferCount == 0)
+                return;
+
+            _stream.Write(_buffer, 0, _bufferCount);
+            _bufferCount = 0;
+        }
     }
 
-    /// <summary>Selects the DEFLATE block encoding.</summary>
-    public enum BlockType
+    internal enum ChunkBlockType
     {
-        /// <summary>Stores bytes without compression.</summary>
-        Uncompressed,
-
-        /// <summary>Uses the RFC 1951 fixed Huffman tree.</summary>
-        Fixed,
-
-        /// <summary>Builds Huffman trees from the block's symbol frequencies.</summary>
-        Dynamic
-    }
-
-    /// <summary>Selects when split points are chosen for dynamic blocks.</summary>
-    public enum BlockSplitting
-    {
-        /// <summary>Does not split the input into multiple dynamic blocks.</summary>
-        None,
-
-        /// <summary>Chooses split points from a greedy LZ77 pass before optimization.</summary>
-        First,
-
-        /// <summary>Optimizes LZ77 before choosing split points.</summary>
-        Last
+        Fixed = 1,
+        Dynamic = 2
     }
 }

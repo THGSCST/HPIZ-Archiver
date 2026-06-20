@@ -115,7 +115,7 @@ namespace HPIZArchiver
         {
             flavorLevelComboBox.Items.AddRange(Enum.GetNames(typeof(CompressionMethod)));
             flavorLevelComboBox.Items.RemoveAt(1); //Remove LZ77 compression method
-            flavorLevelComboBox.SelectedIndex = 4;
+            flavorLevelComboBox.SelectedItem = nameof(CompressionMethod.ZopfliDeflate);
         }
         enum ArchiverMode { Empty, Busy, File, Dir, Finish }
 

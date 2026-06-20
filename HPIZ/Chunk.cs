@@ -1,4 +1,4 @@
-﻿using CompressSharper.Zopfli;
+﻿using HPIZ.Compression;
 using System;
 using System.IO;
 using System.IO.Compression;
@@ -37,28 +37,13 @@ namespace HPIZ
                         deflateStream.Write(input, inputOffset, inputCount);
                     break;
 
-                case CompressionMethod.i5ZopfliDeflate:
-                case CompressionMethod.i10ZopfliDeflate:
-                case CompressionMethod.i15ZopfliDeflate:
+                case CompressionMethod.ZopfliDeflate:
 
                     if (inputCount < Strategy.ZopfliBreakEven) //Skip Zopfli if chunk is small
                         goto case CompressionMethod.ZLibDeflate;
 
-                    byte[] zopfliInput;
-                    if (inputOffset == 0 && inputCount == input.Length)
-                    {
-                        zopfliInput = input;
-                    }
-                    else
-                    {
-                        zopfliInput = new byte[inputCount];
-                        Buffer.BlockCopy(input, inputOffset, zopfliInput, 0, inputCount);
-                    }
-
-                    ZopfliDeflater zstream = new ZopfliDeflater(output);
-                    zstream.NumberOfIterations = (int)flavor;
-                    zstream.MasterBlockSize = 0;
-                    zstream.Deflate(zopfliInput, true);
+                    var zopfli = new HpiChunkZopfliEncoder(output);
+                    zopfli.EncodeChunk(input, inputOffset, inputCount);
                     break;
 
                 case CompressionMethod.LZ77:

@@ -5,6 +5,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace HPIZ
@@ -12,10 +13,7 @@ namespace HPIZ
     public static class HpiFile
     {
         private static readonly Encoding CodePage437 = Encoding.GetEncoding(437);
-        private static readonly ParallelOptions FileCompressionParallelOptions = new ParallelOptions
-        {
-            MaxDegreeOfParallelism = Math.Max(1, Math.Min(Environment.ProcessorCount, 16))
-        };
+        private static readonly ParallelOptions FileCompressionParallelOptions = OperationTuning.ParallelOptions;
 
         public static HpiArchive Open(string archiveFileName)
         {
@@ -40,11 +38,27 @@ namespace HPIZ
             WriteToFile(
                 archiveFileName,
                 new SortedDictionary<string, FileEntry>(StringComparer.OrdinalIgnoreCase),
-                new SortedDictionary<string, string>(StringComparer.OrdinalIgnoreCase));
+                new SortedDictionary<string, string>(StringComparer.OrdinalIgnoreCase),
+                CancellationToken.None);
             return Open(archiveFileName);
         }
 
         public static ExtractionResult DoExtraction(FilePathCollection archivesFiles, string destinationPath, IProgress<string> progress, Dictionary<string, HpiArchive> cache = null)
+        {
+            return DoExtraction(
+                archivesFiles,
+                destinationPath,
+                progress,
+                cache,
+                CancellationToken.None);
+        }
+
+        public static ExtractionResult DoExtraction(
+            FilePathCollection archivesFiles,
+            string destinationPath,
+            IProgress<string> progress,
+            Dictionary<string, HpiArchive> cache,
+            CancellationToken cancellationToken)
         {
             bool disposeCacheEntries = false;
             var errors = new List<FileOperationError>();
@@ -64,6 +78,7 @@ namespace HPIZ
 
                 foreach (var filePath in archivesFiles.Keys)
                 {
+                    cancellationToken.ThrowIfCancellationRequested();
                     try
                     {
                         string fullName = GetSafeExtractionPath(destinationRoot, filePath);
@@ -79,9 +94,16 @@ namespace HPIZ
                             cache.Add(source, archive);
                         }
 
-                        WriteExtractedFile(fullName, archive.Entries[filePath].Uncompress());
+                        WriteExtractedFile(
+                            fullName,
+                            archive.Entries[filePath].Uncompress(cancellationToken),
+                            cancellationToken);
                         extractedFileCount++;
                         progress?.Report(filePath);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        throw;
                     }
                     catch (Exception ex)
                     {
@@ -107,8 +129,28 @@ namespace HPIZ
 
         public static ArchiveCreationResult CreateFromManySources(FilePathCollection sources, string destinationArchiveFileName, CompressionMethod flavor, IProgress<string> progress, Dictionary<string, HpiArchive> cache = null, SortedDictionary<string, string> duplicates = null)
         {
+            return CreateFromManySources(
+                sources,
+                destinationArchiveFileName,
+                flavor,
+                progress,
+                cache,
+                duplicates,
+                CancellationToken.None);
+        }
+
+        public static ArchiveCreationResult CreateFromManySources(
+            FilePathCollection sources,
+            string destinationArchiveFileName,
+            CompressionMethod flavor,
+            IProgress<string> progress,
+            Dictionary<string, HpiArchive> cache,
+            SortedDictionary<string, string> duplicates,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
             if (duplicates == null)
-                duplicates = FindDuplicateContent(sources, cache);
+                duplicates = FindDuplicateContent(sources, cache, cancellationToken);
 
             var files = new SortedDictionary<string, FileEntry>(StringComparer.OrdinalIgnoreCase);
             var errors = new List<FileOperationError>();
@@ -118,10 +160,11 @@ namespace HPIZ
             var compressedEntries = new FileEntry[sourceItems.Length];
             var parallelErrors = new ConcurrentBag<FileOperationError>();
             bool parallelizeFiles = flavor != CompressionMethod.StoreUncompressed
-                && sourceItems.Length >= FileCompressionParallelOptions.MaxDegreeOfParallelism;
+                && sourceItems.Length >= 2;
 
             Action<int> compressSource = index =>
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 string filePath = sourceItems[index].Key;
                 string sourcePath = sourceItems[index].Value;
                 try
@@ -139,25 +182,31 @@ namespace HPIZ
                             flavor,
                             fullName,
                             progress,
-                            !parallelizeFiles);
+                            ShouldParallelizeChunks(buffer.Length, parallelizeFiles),
+                            cancellationToken);
                     }
                     else //Is HPI archive
                     {
                         byte[] buffer;
 
                         if (cache != null)
-                            buffer = cache[sourcePath].Entries[filePath].Uncompress();
+                            buffer = cache[sourcePath].Entries[filePath].Uncompress(cancellationToken);
                         else
                             using (var archive = Open(sourcePath))
-                                buffer = archive.Entries[filePath].Uncompress();
+                                buffer = archive.Entries[filePath].Uncompress(cancellationToken);
 
                         compressedEntries[index] = new FileEntry(
                             buffer,
                             flavor,
                             filePath,
                             progress,
-                            !parallelizeFiles);
+                            ShouldParallelizeChunks(buffer.Length, parallelizeFiles),
+                            cancellationToken);
                     }
+                }
+                catch (OperationCanceledException)
+                {
+                    throw;
                 }
                 catch (Exception ex)
                 {
@@ -166,7 +215,11 @@ namespace HPIZ
             };
 
             if (parallelizeFiles)
-                Parallel.For(0, sourceItems.Length, FileCompressionParallelOptions, compressSource);
+                Parallel.For(
+                    0,
+                    sourceItems.Length,
+                    OperationTuning.CreateParallelOptions(cancellationToken),
+                    compressSource);
             else
                 for (int i = 0; i < sourceItems.Length; i++)
                     compressSource(i);
@@ -181,6 +234,7 @@ namespace HPIZ
 
             foreach (var duplicate in duplicates)
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 FileEntry duplicateSourceEntry;
                 if (files.TryGetValue(duplicate.Value, out duplicateSourceEntry))
                     files.Add(duplicate.Key, duplicateSourceEntry);
@@ -198,7 +252,11 @@ namespace HPIZ
 
             try
             {
-                bool exceedsRecommendedSize = WriteToFile(destinationArchiveFileName, files, validDuplicates);
+                bool exceedsRecommendedSize = WriteToFile(
+                    destinationArchiveFileName,
+                    files,
+                    validDuplicates,
+                    cancellationToken);
                 return new ArchiveCreationResult(files.Count, exceedsRecommendedSize, errors);
             }
             finally
@@ -207,7 +265,21 @@ namespace HPIZ
             }
         }
 
+        private static bool ShouldParallelizeChunks(int uncompressedSize, bool filesAreParallel)
+        {
+            return !filesAreParallel
+                || FileEntry.CalculateChunkQuantity(uncompressedSize) >= OperationTuning.WorkerCount;
+        }
+
         public static SortedDictionary<string, string> FindDuplicateContent(FilePathCollection sources, Dictionary<string, HpiArchive> cache = null)
+        {
+            return FindDuplicateContent(sources, cache, CancellationToken.None);
+        }
+
+        public static SortedDictionary<string, string> FindDuplicateContent(
+            FilePathCollection sources,
+            Dictionary<string, HpiArchive> cache,
+            CancellationToken cancellationToken)
         {
             bool disposeCacheEntries = cache == null;
             if (cache == null)
@@ -219,6 +291,7 @@ namespace HPIZ
 
                 foreach (var filePath in sources.Keys)
                 {
+                    cancellationToken.ThrowIfCancellationRequested();
                     var sourcePath = sources[filePath];
                     long fileSize;
                     //Check if source is a directory or HPI archive
@@ -248,6 +321,7 @@ namespace HPIZ
                     if (fileList.Count > 1)
                         foreach (var candidate in fileList.Keys)
                         {
+                            cancellationToken.ThrowIfCancellationRequested();
                             var sourcePath = fileList[candidate];
                             string hash;
 
@@ -255,12 +329,14 @@ namespace HPIZ
                             if (Directory.Exists(sourcePath))
                             {
                                 string fullName = Path.Combine(sourcePath, candidate);
-                                hash = HashUtility.CalculateSha256(fullName);
+                                hash = HashUtility.CalculateSha256(fullName, cancellationToken);
                             }
                             else //Is HPI archive
                             {
                                 var entry = cache[sourcePath].Entries[candidate];
-                                hash = HashUtility.CalculateSha256(entry.Uncompress());
+                                hash = HashUtility.CalculateSha256(
+                                    entry.Uncompress(cancellationToken),
+                                    cancellationToken);
                             }
 
                             if (hashedFiles.ContainsKey(hash))
@@ -292,8 +368,13 @@ namespace HPIZ
         }
 
 
-        private static bool WriteToFile(string destinationArchiveFileName, SortedDictionary<string, FileEntry> entries, SortedDictionary<string, string> duplicates)
+        private static bool WriteToFile(
+            string destinationArchiveFileName,
+            SortedDictionary<string, FileEntry> entries,
+            SortedDictionary<string, string> duplicates,
+            CancellationToken cancellationToken)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             // Create directory tree and calculate chunk start position
             DirectoryNode directoryTree = new DirectoryNode(entries.Keys.ToList());
             int chunkStartPosition = directoryTree.CalculateTreeSize() + HpiArchive.HeaderSize;
@@ -319,6 +400,7 @@ namespace HPIZ
                     // Write file entries
                     foreach (var file in entries)
                     {
+                        cancellationToken.ThrowIfCancellationRequested();
                         if (!duplicates.ContainsKey(file.Key))
                         {
                             if (chunkWriter.BaseStream.Position > uint.MaxValue)
@@ -330,13 +412,17 @@ namespace HPIZ
                                 WriteInt32Array(chunkWriter.BaseStream, file.Value.CompressedChunkSizes);
 
                             foreach (var chunk in file.Value.ChunkBytes)
+                            {
+                                cancellationToken.ThrowIfCancellationRequested();
                                 chunk.WriteTo(chunkWriter.BaseStream);
+                            }
                         }
                     }
 
                     // Update duplicate file offsets
                     foreach (var duplicate in duplicates)
                     {
+                        cancellationToken.ThrowIfCancellationRequested();
                         entries[duplicate.Key].CompressedDataOffset = entries[duplicate.Value].CompressedDataOffset;
                     }
 
@@ -415,7 +501,10 @@ namespace HPIZ
                 File.Move(temporaryFileName, destinationFileName);
         }
 
-        private static void WriteExtractedFile(string destinationFileName, byte[] contents)
+        private static void WriteExtractedFile(
+            string destinationFileName,
+            byte[] contents,
+            CancellationToken cancellationToken)
         {
             string destinationDirectory = Path.GetDirectoryName(destinationFileName);
             string temporaryFileName = Path.Combine(
@@ -426,9 +515,11 @@ namespace HPIZ
             {
                 using (var fileStream = new FileStream(temporaryFileName, FileMode.CreateNew, FileAccess.Write, FileShare.None))
                 {
+                    cancellationToken.ThrowIfCancellationRequested();
                     fileStream.Write(contents, 0, contents.Length);
                 }
 
+                cancellationToken.ThrowIfCancellationRequested();
                 ReplaceDestinationFile(temporaryFileName, destinationFileName);
             }
             finally
