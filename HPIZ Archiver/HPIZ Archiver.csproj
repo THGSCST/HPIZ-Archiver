@@ -17,7 +17,8 @@
     <Deterministic>true</Deterministic>
     <IsWebBootstrapper>false</IsWebBootstrapper>
     <TargetFrameworkProfile />
-    <PublishUrl>C:\Users\Thiago\Desktop\</PublishUrl>
+    <PublishUrl>publish\ClickOnce\</PublishUrl>
+    <PublishDir>publish\ClickOnce\</PublishDir>
     <Install>true</Install>
     <InstallFrom>Disk</InstallFrom>
     <UpdateEnabled>false</UpdateEnabled>
@@ -28,12 +29,19 @@
     <UpdateRequired>false</UpdateRequired>
     <MapFileExtensions>true</MapFileExtensions>
     <ApplicationRevision>0</ApplicationRevision>
-    <ApplicationVersion>1.4.0.%2a</ApplicationVersion>
+    <ApplicationVersion>1.4.0.0</ApplicationVersion>
     <ProductName>HPIZ Archiver</ProductName>
     <PublisherName>THGSCST</PublisherName>
+    <SuiteName>THGSCST Tools</SuiteName>
+    <Description>View, extract, merge, repack, and compress Total Annihilation HPI archives with Zopfli DEFLATE.</Description>
+    <SupportUrl>https://github.com/THGSCST/HPIZ-Archiver</SupportUrl>
+    <ErrorReportUrl>https://github.com/THGSCST/HPIZ-Archiver/issues/new</ErrorReportUrl>
+    <CreateDesktopShortcut>false</CreateDesktopShortcut>
+    <DisallowUrlActivation>true</DisallowUrlActivation>
+    <TrustUrlParameters>false</TrustUrlParameters>
     <UseApplicationTrust>false</UseApplicationTrust>
     <PublishWizardCompleted>true</PublishWizardCompleted>
-    <BootstrapperEnabled>true</BootstrapperEnabled>
+    <BootstrapperEnabled>false</BootstrapperEnabled>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|x64' ">
     <PlatformTarget>AnyCPU</PlatformTarget>
@@ -61,7 +69,8 @@
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|x64' ">
     <PlatformTarget>x64</PlatformTarget>
-    <DebugType>pdbonly</DebugType>
+    <DebugSymbols>false</DebugSymbols>
+    <DebugType>none</DebugType>
     <Optimize>true</Optimize>
     <OutputPath>bin\Release\</OutputPath>
     <DefineConstants>TRACE</DefineConstants>
@@ -72,7 +81,8 @@
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
     <PlatformTarget>AnyCPU</PlatformTarget>
-    <DebugType>pdbonly</DebugType>
+    <DebugSymbols>false</DebugSymbols>
+    <DebugType>none</DebugType>
     <Optimize>true</Optimize>
     <OutputPath>bin\Release\</OutputPath>
     <DefineConstants>TRACE</DefineConstants>
@@ -89,12 +99,6 @@
     <ApplicationIcon>Resources\hpiz.ico</ApplicationIcon>
   </PropertyGroup>
   <PropertyGroup />
-  <PropertyGroup>
-    <ManifestCertificateThumbprint>50041EE4C47E72E77B91E4FC26BD6492DBA10EAE</ManifestCertificateThumbprint>
-  </PropertyGroup>
-  <PropertyGroup>
-    <ManifestKeyFile>HPIZ Archiver_TemporaryKey.pfx</ManifestKeyFile>
-  </PropertyGroup>
   <PropertyGroup>
     <GenerateManifests>true</GenerateManifests>
   </PropertyGroup>
@@ -167,6 +171,32 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="Resources\hpiz.ico" />
+  </ItemGroup>
+  <ItemGroup>
+    <FileAssociation Include=".hpi">
+      <Visible>False</Visible>
+      <Description>Total Annihilation HPI Archive</Description>
+      <Progid>HPIZArchiver.HPI</Progid>
+      <DefaultIcon>Resources\hpiz.ico</DefaultIcon>
+    </FileAssociation>
+    <FileAssociation Include=".ccx">
+      <Visible>False</Visible>
+      <Description>Total Annihilation CCX Archive</Description>
+      <Progid>HPIZArchiver.CCX</Progid>
+      <DefaultIcon>Resources\hpiz.ico</DefaultIcon>
+    </FileAssociation>
+    <FileAssociation Include=".ufo">
+      <Visible>False</Visible>
+      <Description>Total Annihilation UFO Archive</Description>
+      <Progid>HPIZArchiver.UFO</Progid>
+      <DefaultIcon>Resources\hpiz.ico</DefaultIcon>
+    </FileAssociation>
+    <FileAssociation Include=".gp3">
+      <Visible>False</Visible>
+      <Description>Total Annihilation GP3 Archive</Description>
+      <Progid>HPIZArchiver.GP3</Progid>
+      <DefaultIcon>Resources\hpiz.ico</DefaultIcon>
+    </FileAssociation>
   </ItemGroup>
   <ItemGroup>
     <BootstrapperPackage Include=".NETFramework,Version=v4.8">

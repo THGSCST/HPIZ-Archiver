@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Windows.Forms;
 
 namespace HPIZArchiver
@@ -13,8 +14,11 @@ namespace HPIZArchiver
         {
             OperationTuning.Initialize();
 
-            if (args.Length > 0)
+            if (args.Length > 0
+                && string.Equals(args[0], "-r", StringComparison.OrdinalIgnoreCase))
                 return RunCommandLine(args);
+
+            string[] activationFiles = GetActivationFiles(args);
 
             // Set up global exception handlers
             Application.ThreadException += (sender, e) => ShowException(e.Exception);
@@ -27,8 +31,40 @@ namespace HPIZArchiver
             Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
 
             Application.EnableVisualStyles();
-            Application.Run(new MainForm());
+            Application.Run(new MainForm(activationFiles));
             return 0;
+        }
+
+        private static string[] GetActivationFiles(string[] commandLineArgs)
+        {
+            var activationData = AppDomain.CurrentDomain.SetupInformation
+                .ActivationArguments?.ActivationData;
+
+            IEnumerable<string> values = activationData != null && activationData.Length > 0
+                ? activationData
+                : commandLineArgs;
+
+            return values
+                .Select(GetActivationPath)
+                .Where(path => !string.IsNullOrWhiteSpace(path))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+        }
+
+        private static string GetActivationPath(string value)
+        {
+            Uri uri;
+            if (Uri.TryCreate(value, UriKind.Absolute, out uri) && uri.IsFile)
+                return Path.GetFullPath(uri.LocalPath);
+
+            try
+            {
+                return Path.GetFullPath(value);
+            }
+            catch (Exception)
+            {
+                return null;
+            }
         }
 
         private static int RunCommandLine(string[] args)

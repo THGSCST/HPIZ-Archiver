@@ -19,6 +19,8 @@ namespace HPIZArchiver
         private const string ArchiveSaveFilter =
             "HPI Files|*.hpi|CCX Files|*.ccx|UFO Files|*.ufo|GP3 Files|*.gp3";
 
+        private readonly string[] initialArchivePaths;
+
         SortedSet<string> uniqueSources = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
         Dictionary<string, List<ListViewItem>> uniqueNames = new Dictionary<string, List<ListViewItem>>(StringComparer.OrdinalIgnoreCase);
 
@@ -37,8 +39,23 @@ namespace HPIZArchiver
         ArchiverMode currentMode = ArchiverMode.Empty;
 
         public MainForm()
+            : this(Array.Empty<string>())
         {
+        }
+
+        internal MainForm(IEnumerable<string> initialArchivePaths)
+        {
+            this.initialArchivePaths = initialArchivePaths.ToArray();
             InitializeComponent();
+            Shown += MainForm_Shown;
+        }
+
+        private async void MainForm_Shown(object sender, EventArgs e)
+        {
+            Shown -= MainForm_Shown;
+
+            if (initialArchivePaths.Length > 0)
+                await OpenArchiveFilesAsync(initialArchivePaths);
         }
 
         protected override void OnFormClosed(FormClosedEventArgs e)
@@ -270,67 +287,77 @@ namespace HPIZArchiver
                 "Select one or many HPI files to open",
                 ArchiveOpenFilter);
 
-            if (selectedFiles.Length > 0)
+            await OpenArchiveFilesAsync(selectedFiles);
+        }
+
+        private async Task OpenArchiveFilesAsync(IEnumerable<string> archivePaths)
+        {
+            string[] selectedFiles = archivePaths
+                .Select(Path.GetFullPath)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+
+            if (selectedFiles.Length == 0)
+                return;
+
+            BeginBusyOperation("Loading file list from selected HPI file(s)...", ProgressBarStyle.Marquee);
+            var errors = new List<FileOperationError>();
+
+            string[] extensionOrder = { ".GP3", ".CCX", ".UFO", ".HPI" }; //File load order
+            var orderedList = selectedFiles.OrderBy(x =>
             {
-                BeginBusyOperation("Loading file list from selected HPI file(s)...", ProgressBarStyle.Marquee);
-                var errors = new List<FileOperationError>();
+                var index = Array.IndexOf(extensionOrder, Path.GetExtension(x).ToUpperInvariant());
+                return index < 0 ? int.MaxValue : index;
+            }).ToList();
 
-                string[] extensionOrder = { ".GP3", ".CCX", ".UFO", ".HPI" }; //File load order
-                var orderedList = selectedFiles.OrderBy(x =>
-                {
-                    var index = Array.IndexOf(extensionOrder, Path.GetExtension(x).ToUpper());
-                    return index < 0 ? int.MaxValue : index;
-                }).ToList();
-
-                try
-                {
-                    bool calculateAllHashes = sha256ToolStripMenuItem.Checked;
-                    foreach (var file in orderedList)
-                        if (!uniqueSources.Contains(file))
+            try
+            {
+                bool calculateAllHashes = sha256ToolStripMenuItem.Checked;
+                foreach (var file in orderedList)
+                    if (!uniqueSources.Contains(file))
+                    {
+                        HpiArchive openedArchive = null;
+                        try
                         {
-                            HpiArchive openedArchive = null;
-                            try
-                            {
-                                openedArchive = HpiFile.Open(file);
-                                cachedHPI.Add(file, openedArchive);
-                                uniqueSources.Add(file);
+                            openedArchive = HpiFile.Open(file);
+                            cachedHPI.Add(file, openedArchive);
+                            uniqueSources.Add(file);
 
-                                var knownCandidateSizes = new HashSet<int>(toHashCandidates.Keys);
-                                var filesInfo = await Task.Run(
-                                    () => GetListViewGroupItens(file, calculateAllHashes, knownCandidateSizes));
-                                AddToListViewFiles(filesInfo);
-                                openedArchive = null;
-                            }
-                            catch (Exception ex)
-                            {
-                                HpiArchive archive;
-                                if (cachedHPI.TryGetValue(file, out archive))
-                                {
-                                    archive.Dispose();
-                                    cachedHPI.Remove(file);
-                                }
-                                else
-                                {
-                                    openedArchive?.Dispose();
-                                }
-                                uniqueSources.Remove(file);
-                                errors.Add(new FileOperationError(file, ex));
-                            }
+                            var knownCandidateSizes = new HashSet<int>(toHashCandidates.Keys);
+                            var filesInfo = await Task.Run(
+                                () => GetListViewGroupItens(file, calculateAllHashes, knownCandidateSizes));
+                            AddToListViewFiles(filesInfo);
+                            openedArchive = null;
                         }
+                        catch (Exception ex)
+                        {
+                            HpiArchive archive;
+                            if (cachedHPI.TryGetValue(file, out archive))
+                            {
+                                archive.Dispose();
+                                cachedHPI.Remove(file);
+                            }
+                            else
+                            {
+                                openedArchive?.Dispose();
+                            }
+                            uniqueSources.Remove(file);
+                            errors.Add(new FileOperationError(file, ex));
+                        }
+                    }
 
-                    UpdateStatusBarInfo();
-                    ShowOperationErrors("Open archives", errors);
-                }
-                catch (Exception ex)
-                {
-                    ShowOperationException("Open archives", ex);
-                }
-                finally
-                {
-                    progressBar.Style = ProgressBarStyle.Continuous;
-                    TaskbarProgress.SetState(Handle, TaskbarProgress.ProgressState.None);
-                    SetMode(listViewFiles.Groups.Count > 0 ? ArchiverMode.File : ArchiverMode.Empty);
-                }
+                UpdateStatusBarInfo();
+                ShowOperationErrors("Open archives", errors);
+            }
+            catch (Exception ex)
+            {
+                ShowOperationException("Open archives", ex);
+            }
+            finally
+            {
+                progressBar.Style = ProgressBarStyle.Continuous;
+                TaskbarProgress.SetState(Handle, TaskbarProgress.ProgressState.None);
+                SetMode(listViewFiles.Groups.Count > 0 ? ArchiverMode.File : ArchiverMode.Empty);
             }
         }
 
