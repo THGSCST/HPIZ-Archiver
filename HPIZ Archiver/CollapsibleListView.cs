@@ -1,104 +1,177 @@
-﻿using System;
-
+using System;
+using System.ComponentModel;
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
 
 namespace HPIZArchiver
 {
+    /// <summary>
+    /// ListView with collapsible native groups and optionally read-only check boxes.
+    /// Compatible with .NET Framework 4.8.
+    /// </summary>
     public class CollapsibleListView : ListView
     {
-        // Constants representing specific messages and group state flags
+        // ListView native messages.
         private const int LVM_FIRST = 0x1000;
-        private const int LVM_INSERTGROUP = (LVM_FIRST + 145);
-        private const int LVM_SETGROUPINFO = (LVM_FIRST + 147);
-        private const int LVGF_STATE = 0x00000004;
-        private const int LVGS_COLLAPSIBLE = 0x00000008;
+        private const int LVM_INSERTGROUP = LVM_FIRST + 145;
+        private const int LVM_SETGROUPINFO = LVM_FIRST + 147;
         private const int WM_LBUTTONUP = 0x0202;
 
+        // LVGROUP flags.
+        private const uint LVGF_STATE = 0x00000004;
+        private const uint LVGS_COLLAPSIBLE = 0x00000008;
+
+        private bool _checkBoxesLocked;
+        private bool _allowCheckBoxChange;
+
         /// <summary>
-        /// Intercepts Windows messages to handle group collapsibility and mouse events.
+        /// Gets or sets whether item check boxes are locked.
+        /// The ListView itself remains enabled, so scrolling, selection,
+        /// keyboard navigation and group collapsing continue to work.
         /// </summary>
-        /// <param name="m">The Windows Message to process.</param>
+        [Category("Behavior")]
+        [DefaultValue(false)]
+        [Description("Prevents item check box states from being changed while leaving the ListView enabled and scrollable.")]
+        public bool CheckBoxesLocked
+        {
+            get { return _checkBoxesLocked; }
+            set { _checkBoxesLocked = value; }
+        }
+
+        /// <summary>
+        /// Changes an item's Checked state even when CheckBoxesLocked is true.
+        /// Use this for application-controlled changes while the user interface is locked.
+        /// </summary>
+        public void SetItemChecked(int itemIndex, bool isChecked)
+        {
+            if (itemIndex < 0 || itemIndex >= Items.Count)
+                throw new ArgumentOutOfRangeException("itemIndex");
+
+            bool previous = _allowCheckBoxChange;
+            _allowCheckBoxChange = true;
+
+            try
+            {
+                Items[itemIndex].Checked = isChecked;
+            }
+            finally
+            {
+                _allowCheckBoxChange = previous;
+            }
+        }
+
+        /// <summary>
+        /// Prevents check state changes while CheckBoxesLocked is enabled.
+        /// The control itself is never disabled, so its scroll bars keep working.
+        /// </summary>
+        protected override void OnItemCheck(ItemCheckEventArgs e)
+        {
+            bool lockChange = _checkBoxesLocked && !_allowCheckBoxChange;
+
+            // Set before raising ItemCheck so subscribers see the effective state.
+            if (lockChange)
+                e.NewValue = e.CurrentValue;
+
+            base.OnItemCheck(e);
+
+            // Enforce the lock even if an ItemCheck subscriber changes NewValue.
+            if (lockChange)
+                e.NewValue = e.CurrentValue;
+        }
+
+        /// <summary>
+        /// Intercepts native group insertion so every WinForms ListViewGroup
+        /// becomes collapsible on the underlying Windows common control.
+        /// </summary>
         protected override void WndProc(ref Message m)
         {
-            switch (m.Msg)
+            if (m.Msg == LVM_INSERTGROUP && m.LParam != IntPtr.Zero)
             {
-                case WM_LBUTTONUP:
-                    // Delegates the handling of mouse button up events to the default procedure
-                    base.DefWndProc(ref m);
-                    break;
-                case LVM_INSERTGROUP:
-                    // Handles insertion of a new group by setting its collapsibility before continuing with the default processing
-                    base.WndProc(ref m);
-                    var group = (LvGroup)Marshal.PtrToStructure(m.LParam, typeof(LvGroup));
-                    SetGroupCollapsible(group.iGroupId);
-                    return;
+                // Read the group ID before forwarding the insertion message.
+                // Only the initial LVGROUP fields are needed here.
+                LvGroup nativeGroup = (LvGroup)Marshal.PtrToStructure(
+                    m.LParam, typeof(LvGroup));
+
+                base.WndProc(ref m);
+
+                // LVM_INSERTGROUP returns -1 on failure.
+                if (m.Result != new IntPtr(-1))
+                    SetGroupCollapsible(nativeGroup.iGroupId);
+
+                return;
             }
 
-            // Default message processing
+            // WinForms ListView does not by itself give the native group
+            // expander everything it needs on mouse-up. The native default
+            // window procedure must see WM_LBUTTONUP so the right-side
+            // collapse/expand chevron can toggle the group.
+            //
+            // Do not replace this with only base.WndProc(ref m).
+            if (m.Msg == WM_LBUTTONUP)
+                base.DefWndProc(ref m);
+
             base.WndProc(ref m);
         }
 
         /// <summary>
-        /// Makes a ListViewGroup collapsible by updating its state in the ListView.
+        /// Adds LVGS_COLLAPSIBLE to an existing native ListView group.
         /// </summary>
-        /// <param name="groupItemIndex">Index of the ListViewGroup.</param>
-        private void SetGroupCollapsible(int groupItemIndex)
+        private void SetGroupCollapsible(int groupId)
         {
-            LvGroup group = new LvGroup
+            LvGroup nativeGroup = new LvGroup
             {
-                cbSize = Marshal.SizeOf(typeof(LvGroup)),
-                state = LVGS_COLLAPSIBLE,
+                cbSize = (uint)Marshal.SizeOf(typeof(LvGroup)),
                 mask = LVGF_STATE,
-                iGroupId = groupItemIndex
+                stateMask = LVGS_COLLAPSIBLE,
+                state = LVGS_COLLAPSIBLE
             };
 
-            IntPtr ip = IntPtr.Zero;
+            IntPtr buffer = IntPtr.Zero;
+
             try
             {
-                ip = Marshal.AllocHGlobal(group.cbSize);
-                Marshal.StructureToPtr(group, ip, false);
-                SendMessage(Handle, LVM_SETGROUPINFO, groupItemIndex, ip);
+                buffer = Marshal.AllocHGlobal((int)nativeGroup.cbSize);
+                Marshal.StructureToPtr(nativeGroup, buffer, false);
+
+                // For LVM_SETGROUPINFO, wParam is the group ID.
+                SendMessage(Handle, LVM_SETGROUPINFO, new IntPtr(groupId), buffer);
             }
             finally
             {
-                if (ip != IntPtr.Zero)
-                {
-                    Marshal.FreeHGlobal(ip);
-                }
+                if (buffer != IntPtr.Zero)
+                    Marshal.FreeHGlobal(buffer);
             }
         }
 
         /// <summary>
-        /// Sends a message to a window or windows, typically to modify their appearance or behavior.
+        /// Native SendMessage signature using pointer-sized WPARAM/LRESULT,
+        /// which is correct for both 32-bit and 64-bit processes.
         /// </summary>
-        /// <param name="handle">Handle to the window receiving the message.</param>
-        /// <param name="message">Message identifier.</param>
-        /// <param name="wParam">Additional message-specific information.</param>
-        /// <param name="lParam">Additional message-specific information.</param>
-        /// <returns>Result of the message processing.</returns>
-        [DllImport("user32.dll")]
-        private static extern int SendMessage(IntPtr handle, int message, int wParam, IntPtr lParam);
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+        private static extern IntPtr SendMessage(
+            IntPtr hWnd,
+            int msg,
+            IntPtr wParam,
+            IntPtr lParam);
 
         /// <summary>
-        /// Struct representing a native ListView group.
+        /// Initial portion of the native LVGROUP structure.
+        /// Pointer fields are IntPtr because their contents are not needed;
+        /// this avoids unnecessary string marshalling and remains x86/x64 safe.
         /// </summary>
         [StructLayout(LayoutKind.Sequential)]
         private struct LvGroup
         {
-            public int cbSize;
-            public int mask;
-            [MarshalAs(UnmanagedType.LPTStr)]
-            public string pszHeader;
+            public uint cbSize;
+            public uint mask;
+            public IntPtr pszHeader;
             public int cchHeader;
-            [MarshalAs(UnmanagedType.LPTStr)]
-            public string pszFooter;
+            public IntPtr pszFooter;
             public int cchFooter;
             public int iGroupId;
-            public int stateMask;
-            public int state;
-            public int uAlign;
+            public uint stateMask;
+            public uint state;
+            public uint uAlign;
         }
     }
-
 }

@@ -148,7 +148,7 @@ namespace HPIZArchiver
             compressCheckedFilesToolStripMenuItem.Enabled = mode == ArchiverMode.Dir;
             mergeRepackCheckedFilesToolStripMenuItem.Enabled = mode == ArchiverMode.File;
             closeAllToolStripMenuItem.Enabled = mode != ArchiverMode.Busy && mode != ArchiverMode.Empty;
-            listViewFiles.Enabled = !(mode == ArchiverMode.Busy || mode == ArchiverMode.Finish);
+            listViewFiles.CheckBoxesLocked = mode == ArchiverMode.Busy || mode == ArchiverMode.Finish;
             toolStrip.Enabled = mode != ArchiverMode.Busy;
             progressBar.Visible = mode == ArchiverMode.Busy || mode == ArchiverMode.Finish;
         }
